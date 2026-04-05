@@ -1,0 +1,848 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>獭掌柜</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@700;800;900&display=swap');
+
+:root {
+–otter: #FF6B35;
+–otter-dark: #E55A26;
+–otter-light: #FFF0EB;
+–gold: #FFD000;
+–gold-dark: #E6A800;
+–green: #4CAF50;
+–green-light: #E8F5E9;
+–blue: #2196F3;
+–gray-light: #F5F5F5;
+–gray: #E0E0E0;
+–gray-dark: #9E9E9E;
+–text: #2C2C2C;
+–text-light: #757575;
+–white: #FFFFFF;
+–shadow: 0 4px 0px;
+–radius: 50%;
+}
+
+- { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+body {
+font-family: ‘Nunito’, ‘PingFang SC’, sans-serif;
+background: #FAFAFA;
+min-height: 100vh;
+display: flex;
+flex-direction: column;
+max-width: 480px;
+margin: 0 auto;
+position: relative;
+overflow-x: hidden;
+}
+
+/* ===== TOP BAR ===== */
+.topbar {
+position: sticky;
+top: 0;
+z-index: 100;
+background: var(–white);
+border-bottom: 2px solid var(–gray);
+padding: 12px 20px;
+display: flex;
+align-items: center;
+justify-content: space-between;
+}
+
+.topbar-logo {
+font-size: 20px;
+font-weight: 900;
+color: var(–otter);
+letter-spacing: -0.5px;
+display: flex;
+align-items: center;
+gap: 6px;
+}
+
+.topbar-stats {
+display: flex;
+align-items: center;
+gap: 16px;
+}
+
+.stat-chip {
+display: flex;
+align-items: center;
+gap: 4px;
+font-size: 14px;
+font-weight: 800;
+color: var(–text);
+}
+
+.stat-chip .icon { font-size: 18px; }
+
+/* ===== MONTH HEADER ===== */
+.month-header {
+margin: 16px 20px 8px;
+background: var(–otter);
+border-radius: 18px;
+padding: 14px 20px;
+display: flex;
+align-items: center;
+justify-content: space-between;
+box-shadow: 0 4px 0 var(–otter-dark);
+position: relative;
+overflow: hidden;
+}
+
+.month-header::before {
+content: ‘’;
+position: absolute;
+top: -20px; right: -20px;
+width: 80px; height: 80px;
+background: rgba(255,255,255,0.08);
+border-radius: 50%;
+}
+
+.month-header::after {
+content: ‘’;
+position: absolute;
+bottom: -30px; left: 30px;
+width: 100px; height: 100px;
+background: rgba(255,255,255,0.05);
+border-radius: 50%;
+}
+
+.month-title {
+color: var(–white);
+font-size: 18px;
+font-weight: 900;
+letter-spacing: 0.5px;
+}
+
+.month-sub {
+color: rgba(255,255,255,0.75);
+font-size: 12px;
+font-weight: 700;
+margin-top: 2px;
+}
+
+.month-summary {
+text-align: right;
+color: var(–white);
+}
+
+.month-summary .val {
+font-size: 20px;
+font-weight: 900;
+}
+
+.month-summary .label {
+font-size: 10px;
+color: rgba(255,255,255,0.7);
+font-weight: 700;
+}
+
+/* ===== SCROLL AREA ===== */
+.scroll-area {
+flex: 1;
+overflow-y: auto;
+padding: 10px 20px 100px;
+-webkit-overflow-scrolling: touch;
+}
+
+/* ===== PATH TRACK ===== */
+.path-track {
+position: relative;
+display: flex;
+flex-direction: column;
+align-items: center;
+gap: 0;
+}
+
+/* 蛇形路径连接线 */
+.path-row {
+display: flex;
+width: 100%;
+justify-content: center;
+align-items: center;
+position: relative;
+margin-bottom: 4px;
+}
+
+.path-row.left  { justify-content: flex-start; padding-left: 30px; }
+.path-row.right { justify-content: flex-end;   padding-right: 30px; }
+.path-row.center{ justify-content: center; }
+
+/* 连接线 */
+.connector {
+position: absolute;
+background: var(–gray);
+z-index: 0;
+}
+
+.connector.vertical {
+width: 6px;
+border-radius: 3px;
+}
+
+.connector.horizontal {
+height: 6px;
+border-radius: 3px;
+top: 50%;
+transform: translateY(-50%);
+}
+
+/* ===== DAY NODE ===== */
+.day-node {
+position: relative;
+z-index: 1;
+width: 72px;
+height: 72px;
+border-radius: 50%;
+display: flex;
+flex-direction: column;
+align-items: center;
+justify-content: center;
+cursor: pointer;
+transition: transform 0.15s ease;
+flex-shrink: 0;
+margin: 6px;
+}
+
+.day-node:active { transform: scale(0.93) translateY(3px); }
+
+/* 未来 — 灰色锁定 */
+.day-node.future {
+background: var(–gray-light);
+box-shadow: 0 4px 0 var(–gray);
+border: 3px solid var(–gray);
+}
+
+.day-node.future .day-num { color: var(–gray-dark); }
+
+/* 过去有记录 — 橙色完成 */
+.day-node.done {
+background: var(–otter);
+box-shadow: 0 4px 0 var(–otter-dark);
+border: 3px solid var(–otter-dark);
+}
+
+.day-node.done .day-num { color: var(–white); }
+.day-node.done .day-emoji { color: var(–white); }
+
+/* 过去无记录 — 灰色失败 */
+.day-node.missed {
+background: var(–white);
+box-shadow: 0 4px 0 var(–gray);
+border: 3px solid var(–gray);
+}
+
+.day-node.missed .day-num { color: var(–gray-dark); text-decoration: line-through; }
+
+/* 今天 — 金色高亮脉冲 */
+.day-node.today {
+background: var(–gold);
+box-shadow: 0 4px 0 var(–gold-dark);
+border: 3px solid var(–gold-dark);
+animation: todayPulse 2s ease-in-out infinite;
+}
+
+.day-node.today .day-num { color: var(–text); }
+
+@keyframes todayPulse {
+0%, 100% { box-shadow: 0 4px 0 var(–gold-dark), 0 0 0 0 rgba(255,208,0,0.4); }
+50%       { box-shadow: 0 4px 0 var(–gold-dark), 0 0 0 10px rgba(255,208,0,0); }
+}
+
+.day-num {
+font-size: 22px;
+font-weight: 900;
+line-height: 1;
+}
+
+.day-emoji {
+font-size: 13px;
+margin-top: 2px;
+}
+
+/* 今日箭头指示器 */
+.today-indicator {
+position: absolute;
+top: -28px;
+left: 50%;
+transform: translateX(-50%);
+background: var(–gold);
+color: var(–text);
+font-size: 10px;
+font-weight: 900;
+padding: 3px 8px;
+border-radius: 8px;
+white-space: nowrap;
+box-shadow: 0 2px 0 var(–gold-dark);
+}
+
+.today-indicator::after {
+content: ‘’;
+position: absolute;
+bottom: -6px;
+left: 50%;
+transform: translateX(-50%);
+border: 4px solid transparent;
+border-top-color: var(–gold);
+}
+
+/* 月结宝箱节点 */
+.chest-node {
+width: 80px;
+height: 80px;
+background: var(–white);
+border-radius: 20px;
+border: 3px solid var(–gray);
+box-shadow: 0 4px 0 var(–gray);
+display: flex;
+flex-direction: column;
+align-items: center;
+justify-content: center;
+cursor: pointer;
+margin: 6px;
+transition: transform 0.15s;
+}
+
+.chest-node:active { transform: scale(0.93) translateY(3px); }
+.chest-node .chest-icon { font-size: 32px; }
+.chest-node .chest-label { font-size: 9px; font-weight: 800; color: var(–text-light); margin-top: 2px; }
+
+/* 吉祥物 */
+.mascot-row {
+display: flex;
+justify-content: flex-end;
+padding-right: 20px;
+margin: 4px 0;
+}
+
+.mascot {
+font-size: 52px;
+animation: mascotFloat 3s ease-in-out infinite;
+filter: drop-shadow(0 4px 8px rgba(255,107,53,0.2));
+}
+
+@keyframes mascotFloat {
+0%, 100% { transform: translateY(0); }
+50%       { transform: translateY(-8px); }
+}
+
+/* ===== BOTTOM NAV ===== */
+.bottom-nav {
+position: fixed;
+bottom: 0;
+left: 50%;
+transform: translateX(-50%);
+width: 100%;
+max-width: 480px;
+background: var(–white);
+border-top: 2px solid var(–gray);
+display: flex;
+z-index: 200;
+padding-bottom: env(safe-area-inset-bottom);
+}
+
+.nav-btn {
+flex: 1;
+display: flex;
+flex-direction: column;
+align-items: center;
+justify-content: center;
+padding: 10px 4px 8px;
+cursor: pointer;
+transition: all 0.15s;
+border: none;
+background: none;
+gap: 3px;
+-webkit-tap-highlight-color: transparent;
+}
+
+.nav-btn .nav-icon { font-size: 22px; transition: transform 0.15s; }
+.nav-btn .nav-label { font-size: 10px; font-weight: 800; color: var(–gray-dark); }
+.nav-btn.active .nav-label { color: var(–otter); }
+.nav-btn.active .nav-icon { transform: scale(1.15); }
+
+.nav-btn:active .nav-icon { transform: scale(0.9); }
+
+/* ===== DAY DETAIL SHEET ===== */
+.sheet-overlay {
+display: none;
+position: fixed;
+inset: 0;
+background: rgba(0,0,0,0.45);
+z-index: 500;
+justify-content: flex-end;
+flex-direction: column;
+}
+
+.sheet-overlay.open { display: flex; animation: fadeIn 0.2s ease; }
+
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+.sheet {
+background: var(–white);
+border-radius: 28px 28px 0 0;
+padding: 20px 24px 40px;
+animation: slideUp 0.3s ease;
+max-height: 80vh;
+overflow-y: auto;
+}
+
+@keyframes slideUp {
+from { transform: translateY(100%); }
+to   { transform: translateY(0); }
+}
+
+.sheet-handle {
+width: 40px; height: 5px;
+background: var(–gray);
+border-radius: 3px;
+margin: 0 auto 20px;
+}
+
+.sheet-date {
+font-size: 22px;
+font-weight: 900;
+color: var(–text);
+margin-bottom: 4px;
+}
+
+.sheet-status {
+font-size: 13px;
+font-weight: 700;
+color: var(–text-light);
+margin-bottom: 20px;
+}
+
+.sheet-metrics {
+display: grid;
+grid-template-columns: 1fr 1fr;
+gap: 12px;
+margin-bottom: 20px;
+}
+
+.metric-card {
+background: var(–gray-light);
+border-radius: 16px;
+padding: 14px;
+}
+
+.metric-label {
+font-size: 11px;
+font-weight: 700;
+color: var(–text-light);
+margin-bottom: 4px;
+}
+
+.metric-val {
+font-size: 20px;
+font-weight: 900;
+color: var(–text);
+}
+
+.metric-val.green { color: var(–green); }
+.metric-val.orange { color: var(–otter); }
+
+.sheet-btn {
+width: 100%;
+background: var(–otter);
+color: var(–white);
+border: none;
+border-radius: 18px;
+padding: 16px;
+font-size: 16px;
+font-weight: 900;
+font-family: inherit;
+cursor: pointer;
+box-shadow: 0 4px 0 var(–otter-dark);
+transition: all 0.1s;
+display: flex;
+align-items: center;
+justify-content: center;
+gap: 8px;
+}
+
+.sheet-btn:active { transform: translateY(3px); box-shadow: 0 1px 0 var(–otter-dark); }
+
+.sheet-btn.secondary {
+background: var(–gray-light);
+color: var(–text);
+box-shadow: 0 4px 0 var(–gray);
+margin-top: 10px;
+}
+
+/* 入场动画 */
+.day-node {
+opacity: 0;
+animation: nodeIn 0.4s ease forwards;
+}
+
+@keyframes nodeIn {
+from { opacity: 0; transform: scale(0.5); }
+to   { opacity: 1; transform: scale(1); }
+}
+</style>
+
+</head>
+<body>
+
+<!-- TOP BAR -->
+
+<div class="topbar">
+  <div class="topbar-logo">
+    🦦 獭掌柜
+  </div>
+  <div class="topbar-stats">
+    <div class="stat-chip">
+      <span class="icon">🔥</span>
+      <span id="streak-val">0</span>
+    </div>
+    <div class="stat-chip">
+      <span class="icon">💰</span>
+      <span id="month-days-val">0</span>天
+    </div>
+  </div>
+</div>
+
+<!-- MONTH HEADER -->
+
+<div class="month-header">
+  <div>
+    <div class="month-title" id="month-title">2026年4月</div>
+    <div class="month-sub" id="month-sub">本月已记录 0 天</div>
+  </div>
+  <div class="month-summary">
+    <div class="val" id="month-revenue">¥0</div>
+    <div class="label">本月营收</div>
+  </div>
+</div>
+
+<!-- SCROLL AREA -->
+
+<div class="scroll-area">
+  <div class="path-track" id="path-track"></div>
+</div>
+
+<!-- BOTTOM NAV -->
+
+<div class="bottom-nav">
+  <button class="nav-btn active" onclick="switchTab('calendar')">
+    <span class="nav-icon">📅</span>
+    <span class="nav-label">日历</span>
+  </button>
+  <button class="nav-btn" onclick="switchTab('inventory')">
+    <span class="nav-icon">📦</span>
+    <span class="nav-label">库存看板</span>
+  </button>
+  <button class="nav-btn" onclick="switchTab('expiry')">
+    <span class="nav-icon">⏰</span>
+    <span class="nav-label">临期货品</span>
+  </button>
+  <button class="nav-btn" onclick="switchTab('sales')">
+    <span class="nav-icon">📊</span>
+    <span class="nav-label">销量排行</span>
+  </button>
+  <button class="nav-btn" onclick="switchTab('margin')">
+    <span class="nav-icon">💹</span>
+    <span class="nav-label">毛利排行</span>
+  </button>
+</div>
+
+<!-- DAY DETAIL SHEET -->
+
+<div class="sheet-overlay" id="sheet-overlay" onclick="closeSheet(event)">
+  <div class="sheet" id="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-date" id="sheet-date">4月1日</div>
+    <div class="sheet-status" id="sheet-status">暂无记录</div>
+    <div class="sheet-metrics" id="sheet-metrics"></div>
+    <button class="sheet-btn" id="sheet-action-btn" onclick="goToDay()">
+      <span>🛒</span> 开始收银
+    </button>
+    <button class="sheet-btn secondary" onclick="closeSheetDirect()">关闭</button>
+  </div>
+</div>
+
+<script>
+// ===== 数据层 =====
+const DB = {
+  getHistory: function() {
+    try { return JSON.parse(localStorage.getItem('otter_history')) || {}; } catch(e) { return {}; }
+  },
+  getStreak: function() {
+    const h = this.getHistory();
+    const today = new Date();
+    let streak = 0;
+    for (let i = 0; i < 365; i++) {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      const key = d.toLocaleDateString();
+      if (h[key] && parseFloat(h[key].revenue) > 0) { streak++; }
+      else if (i > 0) { break; }
+    }
+    return streak;
+  },
+  getDayData: function(dateKey) {
+    return this.getHistory()[dateKey] || null;
+  },
+  getMonthRevenue: function(year, month) {
+    const h = this.getHistory();
+    let total = 0;
+    Object.keys(h).forEach(function(k) {
+      const d = new Date(k);
+      if (d.getFullYear() === year && d.getMonth() === month) {
+        total += parseFloat(h[k].revenue) || 0;
+      }
+    });
+    return total;
+  },
+  getMonthDaysRecorded: function(year, month) {
+    const h = this.getHistory();
+    let count = 0;
+    Object.keys(h).forEach(function(k) {
+      const d = new Date(k);
+      if (d.getFullYear() === year && d.getMonth() === month && parseFloat(h[k].revenue) > 0) count++;
+    });
+    return count;
+  }
+};
+
+// ===== 日历渲染 =====
+const now = new Date();
+const currentYear  = now.getFullYear();
+const currentMonth = now.getMonth();
+const currentDay   = now.getDate();
+const daysInMonth  = new Date(currentYear, currentMonth + 1, 0).getDate();
+
+// 月份名
+const monthNames = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+
+function formatMoney(val) {
+  if (val >= 10000) return '¥' + (val / 10000).toFixed(1) + 'w';
+  return '¥' + val.toFixed(0);
+}
+
+function buildCalendar() {
+  const track = document.getElementById('path-track');
+  track.innerHTML = '';
+
+  const history = DB.getHistory();
+
+  // 蛇形布局：每行3个，左→右，右→左交替
+  // 节点位置：left / center / right 交替组成蛇形
+  // 简化为：3列蛇形，奇数行 L→R，偶数行 R→L
+  const COLS = 3;
+  const rows = Math.ceil(daysInMonth / COLS);
+
+  // 吉祥物插入位置（中间偏后）
+  const mascotAfterRow = Math.floor(rows / 2);
+  // 宝箱插入位置（最后一行后面）
+  
+  let dayIndex = 1;
+
+  for (let row = 0; row < rows; row++) {
+    const isRTL = row % 2 === 1; // 偶数行从右到左
+
+    // 收集这一行的日期
+    const rowDays = [];
+    for (let col = 0; col < COLS; col++) {
+      if (dayIndex <= daysInMonth) {
+        rowDays.push(dayIndex);
+        dayIndex++;
+      }
+    }
+    if (isRTL) rowDays.reverse();
+
+    // 行容器
+    const rowEl = document.createElement('div');
+    rowEl.style.cssText = 'display:flex; justify-content:center; align-items:center; width:100%; gap:8px; margin-bottom:4px;';
+
+    rowDays.forEach(function(d, idx) {
+      const nodeEl = buildDayNode(d, history);
+      // 入场动画延迟
+      const absDay = isRTL ? (row * COLS + (COLS - 1 - idx)) : (row * COLS + idx);
+      nodeEl.style.animationDelay = (absDay * 0.04) + 's';
+      rowEl.appendChild(nodeEl);
+    });
+
+    track.appendChild(rowEl);
+
+    // 吉祥物
+    if (row === mascotAfterRow) {
+      const mascotRow = document.createElement('div');
+      mascotRow.className = 'mascot-row';
+      mascotRow.innerHTML = '<div class="mascot">🦦</div>';
+      track.appendChild(mascotRow);
+    }
+  }
+
+  // 月结宝箱
+  const chestRow = document.createElement('div');
+  chestRow.style.cssText = 'display:flex; justify-content:center; margin:8px 0 16px;';
+  const chest = document.createElement('div');
+  chest.className = 'chest-node';
+  const isMonthDone = currentDay >= daysInMonth;
+  chest.innerHTML = '<div class="chest-icon">' + (isMonthDone ? '🏆' : '🔒') + '</div><div class="chest-label">月度总结</div>';
+  chest.onclick = function() { openChest(); };
+  chestRow.appendChild(chest);
+  track.appendChild(chestRow);
+}
+
+function buildDayNode(day, history) {
+  const dateObj = new Date(currentYear, currentMonth, day);
+  const dateKey = dateObj.toLocaleDateString();
+  const dayData = history[dateKey];
+
+  const node = document.createElement('div');
+  node.className = 'day-node';
+  node.dataset.day = day;
+  node.dataset.dateKey = dateKey;
+
+  const isToday   = day === currentDay;
+  const isPast    = day < currentDay;
+  const isFuture  = day > currentDay;
+  const hasSales  = dayData && parseFloat(dayData.revenue) > 0;
+
+  if (isToday) {
+    node.classList.add('today');
+    // 今日指示器
+    const ind = document.createElement('div');
+    ind.className = 'today-indicator';
+    ind.textContent = '今天';
+    node.appendChild(ind);
+  } else if (isFuture) {
+    node.classList.add('future');
+  } else if (isPast && hasSales) {
+    node.classList.add('done');
+  } else {
+    node.classList.add('missed');
+  }
+
+  const numEl = document.createElement('div');
+  numEl.className = 'day-num';
+  numEl.textContent = day;
+  node.appendChild(numEl);
+
+  // 小图标
+  const emojiEl = document.createElement('div');
+  emojiEl.className = 'day-emoji';
+  if (isToday)              emojiEl.textContent = '⭐';
+  else if (hasSales)        emojiEl.textContent = '✓';
+  else if (isPast)          emojiEl.textContent = '✗';
+  else                      emojiEl.textContent = '';
+  node.appendChild(emojiEl);
+
+  node.onclick = function() { openDaySheet(day, dateKey, dayData, isToday, isFuture, isPast, hasSales); };
+
+  return node;
+}
+
+// ===== 顶部数据更新 =====
+function updateHeader() {
+  document.getElementById('month-title').textContent = currentYear + '年' + monthNames[currentMonth];
+  const recorded = DB.getMonthDaysRecorded(currentYear, currentMonth);
+  document.getElementById('month-sub').textContent = '本月已记录 ' + recorded + ' 天';
+  document.getElementById('month-revenue').textContent = formatMoney(DB.getMonthRevenue(currentYear, currentMonth));
+  document.getElementById('streak-val').textContent = DB.getStreak();
+  document.getElementById('month-days-val').textContent = recorded;
+}
+
+// ===== 日期详情弹窗 =====
+let selectedDay = null;
+
+function openDaySheet(day, dateKey, dayData, isToday, isFuture, isPast, hasSales) {
+  selectedDay = { day, dateKey, isToday, isFuture };
+
+  const months = ['1','2','3','4','5','6','7','8','9','10','11','12'];
+  document.getElementById('sheet-date').textContent = (currentMonth + 1) + '月' + day + '日';
+
+  const metricsEl = document.getElementById('sheet-metrics');
+  const actionBtn = document.getElementById('sheet-action-btn');
+
+  if (isFuture) {
+    document.getElementById('sheet-status').textContent = '还没到这天哦';
+    metricsEl.innerHTML = '';
+    actionBtn.style.display = 'none';
+  } else if (!hasSales && !isToday) {
+    document.getElementById('sheet-status').textContent = '这天没有记录';
+    metricsEl.innerHTML = '<div class="metric-card"><div class="metric-label">营收</div><div class="metric-val">¥0</div></div><div class="metric-card"><div class="metric-label">经营盈余</div><div class="metric-val">—</div></div>';
+    actionBtn.style.display = 'none';
+  } else {
+    const rev     = dayData ? parseFloat(dayData.revenue) || 0 : 0;
+    const profit  = dayData ? parseFloat(dayData.profit) || 0 : 0;
+    const varCost = dayData ? parseFloat(dayData.variableCost) || 0 : 0;
+    const gross   = dayData ? (dayData.grossMargin || '—') : '—';
+
+    document.getElementById('sheet-status').textContent = isToday ? '今天' : '已完成';
+
+    metricsEl.innerHTML =
+      '<div class="metric-card"><div class="metric-label">营收</div><div class="metric-val orange">¥' + rev.toFixed(0) + '</div></div>' +
+      '<div class="metric-card"><div class="metric-label">经营盈余</div><div class="metric-val ' + (profit >= 0 ? 'green' : '') + '">¥' + profit.toFixed(0) + '</div></div>' +
+      '<div class="metric-card"><div class="metric-label">变动成本</div><div class="metric-val">¥' + varCost.toFixed(0) + '</div></div>' +
+      '<div class="metric-card"><div class="metric-label">毛利率</div><div class="metric-val ' + (parseFloat(gross) >= 50 ? 'green' : 'orange') + '">' + (gross !== '—' ? gross + '%' : '—') + '</div></div>';
+
+    actionBtn.style.display = 'flex';
+    if (isToday) {
+      actionBtn.innerHTML = '<span>🛒</span> 开始收银';
+    } else {
+      actionBtn.innerHTML = '<span>📋</span> 查看详情';
+    }
+  }
+
+  document.getElementById('sheet-overlay').classList.add('open');
+}
+
+function closeSheet(e) {
+  if (e.target === document.getElementById('sheet-overlay')) closeSheetDirect();
+}
+
+function closeSheetDirect() {
+  document.getElementById('sheet-overlay').classList.remove('open');
+}
+
+function goToDay() {
+  closeSheetDirect();
+  // 跳转到收银台（待实现）
+  alert('收银台功能即将上线 🛒');
+}
+
+function openChest() {
+  const rev = DB.getMonthRevenue(currentYear, currentMonth);
+  const days = DB.getMonthDaysRecorded(currentYear, currentMonth);
+  alert('📊 ' + (currentMonth + 1) + '月月度总结\n\n营业天数：' + days + ' 天\n本月营收：¥' + rev.toFixed(2));
+}
+
+// ===== 底部导航 =====
+function switchTab(tab) {
+  document.querySelectorAll('.nav-btn').forEach(function(b) { b.classList.remove('active'); });
+  event.currentTarget.classList.add('active');
+  if (tab !== 'calendar') {
+    alert('「' + event.currentTarget.querySelector('.nav-label').textContent + '」功能即将上线 🚧');
+    event.currentTarget.classList.remove('active');
+    document.querySelectorAll('.nav-btn')[0].classList.add('active');
+  }
+}
+
+// ===== 滚动到今天 =====
+function scrollToToday() {
+  setTimeout(function() {
+    const todayNode = document.querySelector('.day-node.today');
+    if (todayNode) {
+      todayNode.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, 600);
+}
+
+// ===== 初始化 =====
+buildCalendar();
+updateHeader();
+scrollToToday();
+</script>
+
+</body>
+</html>
