@@ -1,0 +1,585 @@
+<!DOCTYPE html><html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>獭掌柜</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }body {
+font-family: ‘PingFang SC’, ‘Helvetica Neue’, sans-serif;
+background: #F7F7F7;
+min-height: 100vh;
+max-width: 480px;
+margin: 0 auto;
+display: flex;
+flex-direction: column;
+overflow-x: hidden;
+}
+/* ── TOPBAR ── */
+.topbar {
+background: #fff;
+border-bottom: 2px solid #EBEBEB;
+padding: 14px 20px;
+display: flex;
+align-items: center;
+justify-content: space-between;
+position: sticky;
+top: 0;
+z-index: 100;
+}
+.topbar-logo { font-size: 20px; font-weight: 900; color: #FF6B35; }
+.topbar-stats { display: flex; gap: 16px; }
+.stat-chip {
+display: flex; align-items: center; gap: 5px;
+font-size: 15px; font-weight: 800; color: #333;
+}
+/* ── MONTH HEADER ── */
+.month-header {
+background: #FF6B35;
+margin: 14px 16px 0;
+border-radius: 20px;
+padding: 16px 20px;
+display: flex;
+justify-content: space-between;
+align-items: center;
+box-shadow: 0 5px 0 #C44D1A;
+}
+.mh-left .mh-title { color:#fff; font-size:20px; font-weight:900; }
+.mh-left .mh-sub   { color:rgba(255,255,255,.72); font-size:12px; font-weight:700; margin-top:3px; }
+.mh-right .mh-rev  { color:#fff; font-size:26px; font-weight:900; text-align:right; }
+.mh-right .mh-rlbl { color:rgba(255,255,255,.65); font-size:11px; font-weight:700; text-align:right; }
+/* ── SCROLL ── */
+.scroll-area {
+flex: 1;
+overflow-y: auto;
+padding: 24px 0 130px;
+-webkit-overflow-scrolling: touch;
+}
+/* ── SNAKE TRACK ── /
+/
+蛇形路径：单列，节点按固定X位置偏移
+5个位置循环：center → right → far-right → right → center → left → far-left → left → center …
+模拟多邻国S形曲线
+/
+.snake-track {
+position: relative;
+width: 100%;
+/ 最小高度由JS撑开 */
+}
+/* SVG连接线背景 */
+.snake-svg {
+position: absolute;
+top: 0; left: 0;
+width: 100%;
+pointer-events: none;
+z-index: 0;
+}
+/* 每个节点绝对定位 */
+.day-node {
+position: absolute;
+width: 74px;
+height: 74px;
+border-radius: 50%;
+display: flex;
+flex-direction: column;
+align-items: center;
+justify-content: center;
+cursor: pointer;
+z-index: 2;
+transform: translate(-50%, -50%);
+transition: transform .12s ease;
+opacity: 0;
+animation: popIn .38s ease forwards;
+}
+.day-node:active { transform: translate(-50%, calc(-50% + 4px)) scale(.9); }
+@keyframes popIn {
+0%   { opacity:0; transform: translate(-50%,-50%) scale(.35); }
+70%  { transform: translate(-50%,-50%) scale(1.1); }
+100% { opacity:1; transform: translate(-50%,-50%) scale(1); }
+}
+/* 状态 */
+.n-future  { background:#EEEEEE; box-shadow:0 5px 0 #C8C8C8; border:3px solid #C8C8C8; }
+.n-future  .nd-num { color:#AAAAAA; }
+.n-future  .nd-ico { color:#BBBBBB; }
+.n-done    { background:#FF6B35; box-shadow:0 5px 0 #C44D1A; border:3px solid #C44D1A; }
+.n-done    .nd-num { color:#fff; }
+.n-done    .nd-ico { color:#fff; }
+.n-missed  { background:#fff; box-shadow:0 5px 0 #C8C8C8; border:3px solid #DDDDDD; }
+.n-missed  .nd-num { color:#C0C0C0; }
+.n-missed  .nd-ico { color:#CCCCCC; }
+.n-today   {
+background:#FFD000;
+box-shadow:0 5px 0 #BF9B00;
+border:3px solid #BF9B00;
+animation: popIn .38s ease forwards, todayPulse 2.2s .5s ease-in-out infinite;
+}
+.n-today   .nd-num { color:#333; }
+.n-today   .nd-ico { color:#555; }
+@keyframes todayPulse {
+0%,100% { box-shadow:0 5px 0 #BF9B00, 0 0 0 0 rgba(255,208,0,.5); }
+50%      { box-shadow:0 5px 0 #BF9B00, 0 0 0 14px rgba(255,208,0,0); }
+}
+.nd-num { font-size:23px; font-weight:900; line-height:1; }
+.nd-ico { font-size:13px; margin-top:3px; font-weight:700; }
+/* 今日标签 */
+.today-tag {
+position:absolute;
+top:-26px; left:50%;
+transform:translateX(-50%);
+background:#FFD000;
+color:#333;
+font-size:10px; font-weight:900;
+padding:3px 9px;
+border-radius:8px;
+white-space:nowrap;
+box-shadow:0 2px 0 #BF9B00;
+z-index:3;
+}
+.today-tag::after {
+content:’’;
+position:absolute;
+bottom:-5px; left:50%;
+transform:translateX(-50%);
+border:4px solid transparent;
+border-top-color:#FFD000;
+}
+/* 宝箱节点 */
+.chest-node {
+position:absolute;
+width:82px; height:82px;
+background:#fff;
+border-radius:20px;
+border:3px solid #DDDDDD;
+box-shadow:0 5px 0 #C4C4C4;
+display:flex;
+flex-direction:column;
+align-items:center;
+justify-content:center;
+cursor:pointer;
+z-index:2;
+transform:translate(-50%,-50%);
+transition:transform .12s;
+}
+.chest-node:active { transform:translate(-50%,calc(-50% + 4px)) scale(.9); }
+.ch-icon  { font-size:34px; }
+.ch-label { font-size:10px; font-weight:800; color:#999; margin-top:4px; }
+/* 吉祥物 */
+.mascot-node {
+position:absolute;
+font-size:60px;
+transform:translate(-50%,-50%);
+z-index:1;
+animation:mFloat 3s ease-in-out infinite;
+filter:drop-shadow(0 6px 10px rgba(255,107,53,.2));
+pointer-events:none;
+}
+@keyframes mFloat {
+0%,100% { transform:translate(-50%,-50%) translateY(0); }
+50%      { transform:translate(-50%,-50%) translateY(-10px); }
+}
+/* ── BOTTOM NAV ── */
+.bottom-nav {
+position:fixed;
+bottom:0; left:50%;
+transform:translateX(-50%);
+width:100%; max-width:480px;
+background:#fff;
+border-top:2px solid #EBEBEB;
+display:flex;
+z-index:200;
+padding-bottom:env(safe-area-inset-bottom,6px);
+}
+.nav-btn {
+flex:1;
+display:flex; flex-direction:column;
+align-items:center; justify-content:center;
+padding:9px 2px 7px;
+border:none; background:none; cursor:pointer; gap:3px;
+}
+.nav-ico   { font-size:20px; transition:transform .15s; }
+.nav-lbl   { font-size:9px; font-weight:800; color:#AAAAAA; }
+.nav-btn.active .nav-lbl { color:#FF6B35; }
+.nav-btn.active .nav-ico { transform:scale(1.18); }
+.nav-btn:active .nav-ico { transform:scale(.88); }
+/* ── SHEET ── */
+.overlay {
+display:none;
+position:fixed; inset:0;
+background:rgba(0,0,0,.48);
+z-index:500;
+align-items:flex-end;
+}
+.overlay.open { display:flex; animation:fadeIn .2s ease; }
+@keyframes fadeIn { from{opacity:0} to{opacity:1} }
+.sheet {
+background:#fff;
+width:100%;
+border-radius:28px 28px 0 0;
+padding:0 24px 44px;
+animation:sheetUp .3s ease;
+max-height:82vh;
+overflow-y:auto;
+}
+@keyframes sheetUp { from{transform:translateY(100%)} to{transform:translateY(0)} }
+.sh-handle { width:44px;height:5px;background:#E0E0E0;border-radius:3px;margin:14px auto 20px; }
+.sh-date   { font-size:22px;font-weight:900;color:#222; }
+.sh-status { font-size:13px;font-weight:700;color:#999;margin:4px 0 18px; }
+.metrics-grid {
+display:grid; grid-template-columns:1fr 1fr;
+gap:10px; margin-bottom:18px;
+}
+.mc { background:#F5F5F5;border-radius:16px;padding:14px 12px; }
+.mc-lbl { font-size:11px;font-weight:700;color:#999;margin-bottom:5px; }
+.mc-val { font-size:20px;font-weight:900;color:#222; }
+.mc-val.g { color:#4CAF50; }
+.mc-val.o { color:#FF6B35; }
+.mc-val.r { color:#F44336; }
+.btn-row { display:flex;gap:10px;margin-bottom:10px; }
+.btn-sh {
+flex:1; padding:15px 8px;
+border:none; border-radius:18px;
+font-size:15px; font-weight:900; font-family:inherit;
+cursor:pointer; display:flex;
+align-items:center; justify-content:center; gap:6px;
+transition:all .1s;
+}
+.btn-primary { background:#FF6B35;color:#fff;box-shadow:0 5px 0 #C44D1A; }
+.btn-primary:active { transform:translateY(4px);box-shadow:0 1px 0 #C44D1A; }
+.btn-stock   { background:#4CAF50;color:#fff;box-shadow:0 5px 0 #388E3C; }
+.btn-stock:active { transform:translateY(4px);box-shadow:0 1px 0 #388E3C; }
+.btn-ghost   { background:#F0F0F0;color:#555;box-shadow:0 4px 0 #CECECE;width:100%; }
+.btn-ghost:active { transform:translateY(3px);box-shadow:0 1px 0 #CECECE; }
+</style>
+</head>
+<body><!-- TOPBAR --><div class="topbar">
+  <div class="topbar-logo">🦦 獭掌柜</div>
+  <div class="topbar-stats">
+    <div class="stat-chip">🔥 <span id="streak-val">0</span></div>
+    <div class="stat-chip">💰 <span id="days-val">0</span> 天</div>
+  </div>
+</div><!-- MONTH HEADER --><div class="month-header">
+  <div class="mh-left">
+    <div class="mh-title" id="mh-title"></div>
+    <div class="mh-sub"   id="mh-sub"></div>
+  </div>
+  <div class="mh-right">
+    <div class="mh-rev"  id="mh-rev">¥0</div>
+    <div class="mh-rlbl">本月营收</div>
+  </div>
+</div><!-- SCROLL --><div class="scroll-area">
+  <div class="snake-track" id="snake-track">
+    <svg class="snake-svg" id="snake-svg"></svg>
+  </div>
+</div><!-- BOTTOM NAV --><div class="bottom-nav">
+  <button class="nav-btn active" onclick="switchTab(this,'日历')">
+    <span class="nav-ico">📅</span><span class="nav-lbl">日历</span>
+  </button>
+  <button class="nav-btn" onclick="switchTab(this,'库存看板')">
+    <span class="nav-ico">📦</span><span class="nav-lbl">库存看板</span>
+  </button>
+  <button class="nav-btn" onclick="switchTab(this,'临期货品')">
+    <span class="nav-ico">⏰</span><span class="nav-lbl">临期货品</span>
+  </button>
+  <button class="nav-btn" onclick="switchTab(this,'销量排行')">
+    <span class="nav-ico">📊</span><span class="nav-lbl">销量排行</span>
+  </button>
+  <button class="nav-btn" onclick="switchTab(this,'毛利排行')">
+    <span class="nav-ico">💹</span><span class="nav-lbl">毛利排行</span>
+  </button>
+  <button class="nav-btn" onclick="switchTab(this,'库存录入')">
+    <span class="nav-ico">➕</span><span class="nav-lbl">库存录入</span>
+  </button>
+</div><!-- SHEET --><div class="overlay" id="overlay" onclick="overlayTap(event)">
+  <div class="sheet">
+    <div class="sh-handle"></div>
+    <div class="sh-date"   id="sh-date"></div>
+    <div class="sh-status" id="sh-status"></div>
+    <div class="metrics-grid" id="sh-metrics"></div>
+    <div class="btn-row"  id="sh-btn-row"></div>
+    <button class="btn-sh btn-ghost" onclick="closeSheet()">关闭</button>
+  </div>
+</div><script>
+// ── 工具 ─────────────────────────────────────────
+function getHistory(){
+  try{ return JSON.parse(localStorage.getItem('otter_history'))||{}; }
+  catch(e){ return {}; }
+}
+function fmtMoney(v){
+  v = parseFloat(v)||0;
+  return v>=10000 ? '¥'+(v/10000).toFixed(1)+'w' : '¥'+Math.round(v);
+}
+
+// ── 当前日期 ──────────────────────────────────────
+var now   = new Date();
+var YEAR  = now.getFullYear();
+var MONTH = now.getMonth();
+var TODAY = now.getDate();
+var DAYS  = new Date(YEAR,MONTH+1,0).getDate();
+var MN    = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+
+function dateKey(d){ return new Date(YEAR,MONTH,d).toLocaleDateString(); }
+
+function monthRevenue(){
+  var h=getHistory(),t=0;
+  Object.keys(h).forEach(function(k){
+    var d=new Date(k);
+    if(d.getFullYear()===YEAR&&d.getMonth()===MONTH) t+=parseFloat(h[k].revenue)||0;
+  });
+  return t;
+}
+function monthDaysRecorded(){
+  var h=getHistory(),c=0;
+  Object.keys(h).forEach(function(k){
+    var d=new Date(k);
+    if(d.getFullYear()===YEAR&&d.getMonth()===MONTH&&parseFloat(h[k].revenue)>0) c++;
+  });
+  return c;
+}
+function getStreak(){
+  var h=getHistory(),s=0;
+  for(var i=0;i<365;i++){
+    var d=new Date(now); d.setDate(d.getDate()-i);
+    var k=d.toLocaleDateString();
+    if(h[k]&&parseFloat(h[k].revenue)>0) s++;
+    else if(i>0) break;
+  }
+  return s;
+}
+
+// ── 蛇形路径坐标 ─────────────────────────────────
+/*
+  多邻国蛇形：单列，X位置在5个锚点之间按正弦波摆动
+  锚点（基于容器宽度百分比）：
+    far-left=18%  left=30%  center=50%  right=70%  far-right=82%
+
+  路径模式（每8个节点一个完整S周期）：
+  center→right→far-right→right→center→left→far-left→left→(repeat)
+
+  Y间距固定 = 100px
+  顶部起始 Y = 60px（留给今日标签）
+*/
+var X_POSITIONS = [50, 68, 80, 68, 50, 32, 20, 32]; // 百分比，8步循环
+var Y_STEP  = 100;  // px per node
+var Y_START = 70;   // px
+
+function getNodeCoords(index, containerWidth){
+  var xPct = X_POSITIONS[index % X_POSITIONS.length];
+  var x = containerWidth * xPct / 100;
+  var y = Y_START + index * Y_STEP;
+  return { x:x, y:y };
+}
+
+// ── 渲染蛇形 ─────────────────────────────────────
+function buildSnake(){
+  var track  = document.getElementById('snake-track');
+  var svg    = document.getElementById('snake-svg');
+  var h      = getHistory();
+
+  // 容器宽度
+  var W = track.offsetWidth || 375;
+
+  // 总节点数 = DAYS + 1（宝箱）+ 1（吉祥物，不算节点）
+  var totalNodes = DAYS + 1;
+  var trackH = Y_START + totalNodes * Y_STEP + 60;
+  track.style.height = trackH + 'px';
+  svg.setAttribute('height', trackH);
+  svg.setAttribute('viewBox', '0 0 '+W+' '+trackH);
+
+  // 收集所有坐标（含宝箱）
+  var coords = [];
+  for(var i=0; i<=DAYS; i++){
+    coords.push(getNodeCoords(i, W));
+  }
+
+  // ── 画连接线 ──
+  var pathD = '';
+  for(var i=0;i<coords.length-1;i++){
+    var a=coords[i], b=coords[i+1];
+    if(i===0){
+      pathD = 'M '+a.x+' '+a.y;
+    }
+    // 贝塞尔曲线让路径更圆润
+    var mx = (a.x+b.x)/2;
+    var my = (a.y+b.y)/2;
+    pathD += ' Q '+a.x+' '+my+' '+b.x+' '+b.y;
+  }
+  var pathEl = document.createElementNS('http://www.w3.org/2000/svg','path');
+  pathEl.setAttribute('d', pathD);
+  pathEl.setAttribute('fill','none');
+  pathEl.setAttribute('stroke','#E0E0E0');
+  pathEl.setAttribute('stroke-width','8');
+  pathEl.setAttribute('stroke-linecap','round');
+  pathEl.setAttribute('stroke-linejoin','round');
+  svg.appendChild(pathEl);
+
+  // ── 渲染日期节点 ──
+  for(var day=1; day<=DAYS; day++){
+    var idx  = day - 1;
+    var pos  = coords[idx];
+    var key  = dateKey(day);
+    var data = h[key]||null;
+    var hasSales = data && parseFloat(data.revenue)>0;
+    var isToday  = day===TODAY;
+    var isPast   = day<TODAY;
+    var isFuture = day>TODAY;
+
+    var node = document.createElement('div');
+    node.className = 'day-node';
+    node.style.left = pos.x + 'px';
+    node.style.top  = pos.y + 'px';
+    node.style.animationDelay = (idx*35)+'ms';
+
+    // 状态
+    if(isToday)       node.classList.add('n-today');
+    else if(isFuture) node.classList.add('n-future');
+    else if(hasSales) node.classList.add('n-done');
+    else              node.classList.add('n-missed');
+
+    // 今日标签
+    if(isToday){
+      var tag=document.createElement('div');
+      tag.className='today-tag';
+      tag.textContent='今天';
+      node.appendChild(tag);
+    }
+
+    var numEl=document.createElement('div');
+    numEl.className='nd-num';
+    numEl.textContent=day;
+    node.appendChild(numEl);
+
+    var icoEl=document.createElement('div');
+    icoEl.className='nd-ico';
+    if(isToday)        icoEl.textContent='⭐';
+    else if(hasSales)  icoEl.textContent='✓';
+    else if(isPast)    icoEl.textContent='✗';
+    node.appendChild(icoEl);
+
+    (function(d,k,dat,isT,isF,isP,hS){
+      node.onclick=function(){ openSheet(d,k,dat,isT,isF,isP,hS); };
+    })(day,key,data,isToday,isFuture,isPast,hasSales);
+
+    track.appendChild(node);
+  }
+
+  // ── 吉祥物（在DAYS/2处旁边） ──
+  var mascotIdx = Math.floor(DAYS/2);
+  var mascotPos = coords[mascotIdx];
+  var mascot    = document.createElement('div');
+  mascot.className = 'mascot-node';
+  // 吉祥物偏右侧，不遮挡节点
+  var mxOffset = mascotPos.x > W*0.5 ? -80 : 80;
+  mascot.style.left = (mascotPos.x + mxOffset)+'px';
+  mascot.style.top  = mascotPos.y + 'px';
+  mascot.textContent = '🦦';
+  track.appendChild(mascot);
+
+  // ── 宝箱节点（最后） ──
+  var chestPos = coords[DAYS];
+  var chest    = document.createElement('div');
+  chest.className = 'chest-node';
+  chest.style.left = chestPos.x+'px';
+  chest.style.top  = chestPos.y+'px';
+  var done = TODAY>=DAYS;
+  chest.innerHTML = '<div class="ch-icon">'+(done?'🏆':'🔒')+'</div><div class="ch-label">月度总结</div>';
+  chest.onclick = openChest;
+  track.appendChild(chest);
+}
+
+// ── 头部 ─────────────────────────────────────────
+function updateHeader(){
+  document.getElementById('mh-title').textContent = YEAR+'年'+MN[MONTH];
+  var md=monthDaysRecorded();
+  document.getElementById('mh-sub').textContent  = '本月已记录 '+md+' 天';
+  document.getElementById('mh-rev').textContent  = fmtMoney(monthRevenue());
+  document.getElementById('streak-val').textContent = getStreak();
+  document.getElementById('days-val').textContent   = md;
+}
+
+// ── 详情弹窗 ─────────────────────────────────────
+function openSheet(day, key, data, isToday, isFuture, isPast, hasSales){
+  document.getElementById('sh-date').textContent = (MONTH+1)+'月'+day+'日';
+  var metrics = document.getElementById('sh-metrics');
+  var btnRow  = document.getElementById('sh-btn-row');
+
+  if(isFuture){
+    document.getElementById('sh-status').textContent='还没到这天哦 🔒';
+    metrics.innerHTML='';
+    btnRow.innerHTML='';
+
+  } else if(!hasSales && !isToday){
+    document.getElementById('sh-status').textContent='这天没有记录';
+    metrics.innerHTML=
+      '<div class="mc"><div class="mc-lbl">营收</div><div class="mc-val">¥0</div></div>'+
+      '<div class="mc"><div class="mc-lbl">经营盈余</div><div class="mc-val">—</div></div>';
+    btnRow.innerHTML='';
+
+  } else {
+    var rev  = data?parseFloat(data.revenue)||0:0;
+    var prof = data?parseFloat(data.profit)||0:0;
+    var varC = data?parseFloat(data.variableCost)||0:0;
+    var gm   = data&&data.grossMargin?data.grossMargin:null;
+    var profC= prof>=0?'g':'r';
+    var gmC  = gm&&parseFloat(gm)>=50?'g':'o';
+
+    document.getElementById('sh-status').textContent=isToday?'今天 · 进行中':'已完成 ✓';
+
+    metrics.innerHTML=
+      '<div class="mc"><div class="mc-lbl">营收</div><div class="mc-val o">'+fmtMoney(rev)+'</div></div>'+
+      '<div class="mc"><div class="mc-lbl">经营盈余</div><div class="mc-val '+profC+'">'+fmtMoney(prof)+'</div></div>'+
+      '<div class="mc"><div class="mc-lbl">变动成本</div><div class="mc-val">'+fmtMoney(varC)+'</div></div>'+
+      '<div class="mc"><div class="mc-lbl">毛利率</div><div class="mc-val '+(gm?gmC:'')+'">'+( gm?gm+'%':'—' )+'</div></div>';
+
+    // 今天：收银 + 进货；过去：仅查看
+    if(isToday){
+      btnRow.innerHTML=
+        '<button class="btn-sh btn-primary" onclick="goAction(\'cashier\')"><span>🛒</span> 开始收银</button>'+
+        '<button class="btn-sh btn-stock"   onclick="goAction(\'stock\')"><span>📦</span> 进货</button>';
+    } else {
+      btnRow.innerHTML=
+        '<button class="btn-sh btn-primary" onclick="goAction(\'detail\')" style="width:100%"><span>📋</span> 查看详情</button>';
+    }
+  }
+
+  document.getElementById('overlay').classList.add('open');
+}
+
+function overlayTap(e){
+  if(e.target===document.getElementById('overlay')) closeSheet();
+}
+function closeSheet(){
+  document.getElementById('overlay').classList.remove('open');
+}
+function goAction(type){
+  closeSheet();
+  var msgs = { cashier:'收银台功能即将上线 🛒', stock:'进货录入功能即将上线 📦', detail:'详情查看功能即将上线 📋' };
+  alert(msgs[type]||'即将上线');
+}
+function openChest(){
+  alert('📊 '+(MONTH+1)+'月月度总结\n\n营业天数：'+monthDaysRecorded()+' 天\n本月营收：'+fmtMoney(monthRevenue()));
+}
+
+// ── 底部导航 ─────────────────────────────────────
+function switchTab(btn,name){
+  document.querySelectorAll('.nav-btn').forEach(function(b){ b.classList.remove('active'); });
+  btn.classList.add('active');
+  if(name!=='日历'){
+    alert('「'+name+'」功能即将上线 🚧');
+    btn.classList.remove('active');
+    document.querySelectorAll('.nav-btn')[0].classList.add('active');
+  }
+}
+
+// ── 滚动到今天 ───────────────────────────────────
+function scrollToToday(){
+  setTimeout(function(){
+    var node=document.querySelector('.n-today');
+    if(node) node.scrollIntoView({behavior:'smooth',block:'center'});
+  },600);
+}
+
+// ── 初始化 ───────────────────────────────────────
+updateHeader();
+buildSnake();
+scrollToToday();
+</script></body>
+</html>
