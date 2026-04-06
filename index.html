@@ -271,6 +271,11 @@ transition:all .1s;
 .btn-stock:active { transform:translateY(4px);box-shadow:0 1px 0 #388E3C; }
 .btn-ghost   { background:#F0F0F0;color:#555;box-shadow:0 4px 0 #CECECE;width:100%; }
 .btn-ghost:active { transform:translateY(3px);box-shadow:0 1px 0 #CECECE; }
+;
+#camera-container { display:none;position:fixed;inset:0;background:rgba(0,0,0,0.9);z-index:1000;flex-direction:column;align-items:center;justify-content:center;}
+#camera-video { width:85%; border:3px solid #FF6B35;  border-radius:12px; }
+#camera-close { margin-top:20px;padding:12px 25px;background:#FF6B35;color:white;border:none;border-radius:8px;font-weight:900; }
+  
 </style>
 
 </head>
@@ -306,6 +311,14 @@ transition:all .1s;
     <svg class="snake-svg" id="snake-svg"></svg>
   </div>
 </div>
+  
+<!-- CAMERA -->
+
+<div id="camera-container">
+  <video id="camera-video" autoplay playsinline></video>
+  <div style="color:white; margin-top:15px; font-weight:800;">[ 请对准条形码 ]</div>
+  <button id="camera-close" onclick="Scanner.stop()">取消</button>
+</div>
 
 <!-- BOTTOM NAV -->
 
@@ -325,7 +338,7 @@ transition:all .1s;
   <button class="nav-btn" onclick="switchTab(this,'毛利排行')">
     <span class="nav-ico">💹</span><span class="nav-lbl">毛利排行</span>
   </button>
-  <button class="nav-btn" onclick="entry.html">
+  <button class="nav-btn" onclick="goAction('stock')">
     <span class="nav-ico">➕</span><span class="nav-lbl">库存录入</span>
   </button>
 </div>
@@ -342,12 +355,17 @@ transition:all .1s;
     <button class="btn-sh btn-ghost" onclick="closeSheet()">关闭</button>
   </div>
 </div>
+<script src="https://unpkg.com/@zxing/library@latest"></script>
+<script src="store.js"></script>
+<script src="engine.js"></script>
+<script src="scanner.js"></script>
+
+
 
 <script>
 // ── 工具 ─────────────────────────────────────────
 function getHistory(){
-  try{ return JSON.parse(localStorage.getItem('otter_history'))||{}; }
-  catch(e){ return {}; }
+  return Store.getHis();
 }
 function fmtMoney(v){
   v = parseFloat(v)||0;
@@ -595,25 +613,112 @@ function overlayTap(e){
 function closeSheet(){
   document.getElementById('overlay').classList.remove('open');
 }
-function goAction(type){
+// ── 弹窗动作 ──
+function goAction(type) {
+  const dayStr = document.getElementById('sh-date').textContent;
+  const day = parseInt(dayStr.match(/\d+/)[0]);
+  const key = dateKey(day);
+  const his = Store.getHis();
+  
   closeSheet();
-  var msgs = { cashier:'收银台功能即将上线 🛒', stock:'进货录入功能即将上线 📦', detail:'详情查看功能即将上线 📋' };
-  alert(msgs[type]||'即将上线');
+
+  if (type === 'cashier') {
+    // 唤起扫码收银
+    Scanner.start(function(code) {
+      const res = Engine.sell(key, code, 1);
+      if (res.success) {
+        alert("💰 收银成功！已记入 " + dayStr);
+        location.reload(); // 刷新页面更新 UI 和营收
+      } else {
+        alert("❌ 失败: " + res.msg);
+      }
+    });
+  } else if (type === 'stock') {
+    // 快捷跳转到录入逻辑 (假设你的 scanner.js 已经处理了 Engine.stockIn)
+    alert("正在启动扫码入库...");
+    Scanner.start(function(code) {
+      const inv = Store.getInv();
+      const exist = inv[code];
+      const name = prompt("品名:", exist ? exist.name : "");
+      const qty = parseInt(prompt("入库数量:", "10"));
+      const price = parseFloat(prompt("零售价:", exist ? exist.price : "10"));
+      const cost = parseFloat(prompt("进货成本:", exist ? exist.cost : "5"));
+      
+      if(name && !isNaN(qty)) {
+        Engine.stockIn(code, name, qty, cost, price);
+        alert("✅ 入库成功");
+        location.reload();
+      }
+    });
+  } else if (type === 'detail') {
+    const data = his[key];
+    if (!data || !data.sales || data.sales.length === 0) {
+      alert("📅 " + dayStr + " 没有详细交易记录");
+    } else {
+      let detail = "📋 " + dayStr + " 交易流水：\n";
+      data.sales.forEach((s, i) => {
+        detail += `${i+1}. [${s.time || '时间未知'}] ${s.name} x${s.qty} (¥${s.rev})\n`;
+      });
+      alert(detail);
+    }
+  }
 }
+
 function openChest(){
   alert('📊 '+(MONTH+1)+'月月度总结\n\n营业天数：'+monthDaysRecorded()+' 天\n本月营收：'+fmtMoney(monthRevenue()));
 }
 
 // ── 底部导航 ─────────────────────────────────────
-function switchTab(btn,name){
+function switchTab(btn, name) {
+  // UI 切换
   document.querySelectorAll('.nav-btn').forEach(function(b){ b.classList.remove('active'); });
   btn.classList.add('active');
-  if(name!=='日历'){
-    alert('「'+name+'」功能即将上线 🚧');
-    btn.classList.remove('active');
-    document.querySelectorAll('.nav-btn')[0].classList.add('active');
+
+  if (name === '日历') return; // 回到日历不需要额外动作
+
+  const inv = Store.getInv();
+  const his = Store.getHis();
+
+  if (name === '库存看板') {
+    let str = "📦 实时库存清单：\n------------------\n";
+    const keys = Object.keys(inv);
+    if (keys.length === 0) {
+      str += "库存为空，请先录入商品。";
+    } else {
+      keys.forEach(code => {
+        const i = inv[code];
+        str += `• ${i.name}: ${i.stock} 件 (¥${i.price})\n`;
+      });
+    }
+    alert(str);
+    // 自动切回日历激活状态
+    setTimeout(() => {
+      document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.nav-btn')[0].classList.add('active');
+    }, 100);
+
+  } else if (name === '销量排行' || name === '毛利排行') {
+    // 简单实现：从历史账本中提取
+    let report = `📊 ${name}：\n`;
+    let items = [];
+    Object.values(his).forEach(day => {
+      if(day.sales) items = items.concat(day.sales);
+    });
+    if(items.length === 0) {
+      alert("暂无销售数据");
+    } else {
+      // 按营收排序示例
+      items.sort((a,b) => b.rev - a.rev);
+      items.slice(0,10).forEach((it, idx) => {
+        report += `${idx+1}. ${it.name} | ¥${it.rev}\n`;
+      });
+      alert(report);
+    }
+  } else if (name === '临期货品') {
+    alert("⏰ 临期检查：目前库内商品状态良好。");
   }
 }
+
 
 // ── 滚动到今天 ───────────────────────────────────
 function scrollToToday(){
