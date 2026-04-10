@@ -215,9 +215,7 @@ transition:all .1s;
 .btn-ghost   { background:#F0F0F0;color:#555;box-shadow:0 4px 0 #CECECE;width:100%; }
 .btn-ghost:active { transform:translateY(3px);box-shadow:0 1px 0 #CECECE; }
 
-/* ════════════════════════════════════════════
-页面通用组件
-════════════════════════════════════════════ */
+/* --页面通用组件-- */
 .page-title-bar {
 display:flex; align-items:center; gap:8px; margin-bottom:16px;
 }
@@ -230,7 +228,7 @@ text-transform:uppercase; letter-spacing:.06em;
 margin:18px 0 10px;
 }
 
-/* 搜索框 */
+/* --搜索框-- */
 .search-wrap { position:relative; margin-bottom:12px; }
 .search-box  { display:flex; align-items:center; background:#fff; border:2px solid var(--border); border-radius:14px; padding:0 14px; }
 .search-ico  { font-size:16px; margin-right:8px; }
@@ -250,9 +248,7 @@ padding:12px 16px; cursor:pointer; transition:background .1s;
 .dd-info { font-size:12px; color:var(--text-3); }
 .dd-empty { padding:16px; text-align:center; color:var(--text-3); font-size:14px; }
 
-/* ════════════════════════════════════════════
-收银台
-════════════════════════════════════════════ */
+/* --收银台-- */
 .cart-list { display:flex; flex-direction:column; gap:8px; margin-bottom:80px; }
 .cart-empty { text-align:center; color:var(--text-3); font-size:15px; padding:40px 20px; }
 
@@ -311,9 +307,7 @@ animation:successPop .4s cubic-bezier(.34,1.56,.64,1);
 .ss-text { font-size:22px; font-weight:900; color:var(--text); margin-top:10px; }
 .ss-sub  { font-size:14px; color:var(--text-3); margin-top:6px; }
 
-/* ════════════════════════════════════════════
-库存录入 / 进货表单
-════════════════════════════════════════════ */
+/* --库存录入 / 进货表单-- */
 .form-subtitle { font-size:13px; color:var(--text-3); margin:-8px 0 16px; }
 
 .form-card { background:#fff; border-radius:20px; padding:20px 16px; margin-bottom:16px; box-shadow:0 2px 12px rgba(0,0,0,.06); }
@@ -376,6 +370,7 @@ box-shadow:0 1px 6px rgba(0,0,0,.05);
 .hi-meta { font-size:11px; color:var(--text-3); margin-top:2px; }
 .hi-qty  { font-size:16px; font-weight:900; color:var(--orange); text-align:right; }
 .hi-exp  { font-size:10px; color:var(--text-3); text-align:right; margin-top:2px; }
+.hidden  { display:none !important; }
 
 /* ════════════════════════════════════════════
 库存看板
