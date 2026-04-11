@@ -1380,16 +1380,17 @@ function openSheet(day, key, data, isToday, isFuture, isPast, hasSales) {
     metrics.innerHTML = '<div class="mc"><div class="mc-lbl">营收</div><div class="mc-val">¥0</div></div><div class="mc"><div class="mc-lbl">经营盈余</div><div class="mc-val">—</div></div>';
     btnRow.innerHTML = '';
   } else {
-    var rev  = data ? parseFloat(data.revenue)||0 : 0;
-    var prof = data ? parseFloat(data.profit)||0  : 0;
-    var varC = data ? parseFloat(data.variableCost)||0 : 0;
-    var gm   = data && data.grossMargin ? data.grossMargin : null;
-    document.getElementById('sh-status').textContent = isToday ? '今天 · 进行中' : '已完成 ✓';
+    const currentData = Engine.getDay(key) || data || {};
+    var rev  = parseFloat(currentData.revenue)|| 0;
+    var prof = parseFloat(currentData.profit)|| 0;
+    var varC = parseFloat(currentData.variableCost)|| (rev - prof);
+    var gm   = currentData.grossMargin || (rev >0 ? Math.round(prof / rev * 100) : null);
+    document.getElementById('sh-status').textContent = isToday ? '今天 · 进行中' : (hasSales ? '已完成 ✓' : '暂无记录');
     metrics.innerHTML =
-      '<div class="mc"><div class="mc-lbl">营收</div><div class="mc-val o">'+Engine.fmtMoney(rev)+'</div></div>'+
-      '<div class="mc"><div class="mc-lbl">经营盈余</div><div class="mc-val '+(prof>=0?'g':'r')+'">'+Engine.fmtMoney(prof)+'</div></div>'+
-      '<div class="mc"><div class="mc-lbl">变动成本</div><div class="mc-val">'+Engine.fmtMoney(varC)+'</div></div>'+
-      '<div class="mc"><div class="mc-lbl">毛利率</div><div class="mc-val '+(gm&&gm>=50?'g':'o')+'">'+( gm ? gm+'%' : '—' )+'</div></div>';
+      `<div class="mc"><div class="mc-lbl">营收</div><div class="mc-val o">${Engine.fmtMoney(rev)}</div></div>` +
+      `<div class="mc"><div class="mc-lbl">经营盈余</div><div class="mc-val ${prof >= 0 ? 'g' : 'r'}">${Engine.fmtMoney(prof)}</div></div>` +
+      `<div class="mc"><div class="mc-lbl">变动成本</div><div class="mc-val">${Engine.fmtMoney(varC)}</div></div>` +
+      `<div class="mc"><div class="mc-lbl">毛利率</div><div class="mc-val ${gm && gm >= 50 ? 'g' : 'o'}">${gm ? gm + '%' : '—'}</div></div>`;
     if (isToday) {
       btnRow.innerHTML =
         '<button class="btn-sh btn-primary" onclick="closeSheet();switchTab(null,\'cashier\')"><span>🛒</span> 开始收银</button>'+
