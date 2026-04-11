@@ -132,12 +132,12 @@ animation:popIn .38s ease forwards, todayPulse 2.2s .5s ease-in-out infinite;
 
 .today-tag {
 position:absolute; top:-26px; left:50%; transform:translateX(-50%);
-background:var(–yellow); color:#333; font-size:10px; font-weight:900;
-padding:3px 9px; border-radius:8px; white-space:nowrap; box-shadow:0 2px 0 var(–yellow-dk); z-index:3;
+background:var(--yellow); color:#333; font-size:10px; font-weight:900;
+padding:3px 9px; border-radius:8px; white-space:nowrap; box-shadow:0 2px 0 var(--yellow-dk); z-index:3;
 }
 .today-tag::after {
-content:’’; position:absolute; bottom:-5px; left:50%; transform:translateX(-50%);
-border:4px solid transparent; border-top-color:var(–yellow);
+content:''; position:absolute; bottom:-5px; left:50%; transform:translateX(-50%);
+border:4px solid transparent; border-top-color:var(--yellow);
 }
 
 .chest-node {
@@ -163,7 +163,7 @@ filter:drop-shadow(0 6px 10px rgba(255,107,53,.2)); pointer-events:none;
 /* ── BOTTOM NAV ── */
 .bottom-nav {
 position:fixed; bottom:0; left:50%; transform:translateX(-50%);
-width:100%; max-width:480px; background:#fff; border-top:2px solid var(–border);
+width:100%; max-width:480px; background:#fff; border-top:2px solid var(--border);
 display:flex; z-index:200; padding-bottom:env(safe-area-inset-bottom,6px);
 }
 .nav-btn {
@@ -1147,8 +1147,8 @@ const Dashboard = (function () {
       <div>
         <div class="page-title-bar"><span class="page-title-icon">💹</span><span class="page-title-text">毛利排行</span></div>
         <div class="rank-tab-row">
-          <button class="rank-tab active" onclick="Dashboard._rtab('sold',this,container)">已售毛利榜</button>
-          <button class="rank-tab" onclick="Dashboard._rtab('unit',this,container)">单品毛利榜</button>
+          <button class="rank-tab active" onclick="Dashboard._rtab('sold',this)">已售毛利榜</button>
+          <button class="rank-tab" onclick="Dashboard._rtab('unit',this)">单品毛利榜</button>
         </div>
         <div id="rp-sold"></div>
         <div id="rp-unit" style="display:none"></div>
@@ -1169,11 +1169,14 @@ const Dashboard = (function () {
       ?'<div class="rank-subtitle">所有商品单件毛利（售价−进价），不论是否售出</div>'+unit.map((item,i)=>_card(item,i,item.unitProfit,mu,Engine.fmtMoney(item.unitProfit)+'/件','毛利率 '+item.margin+'%')).join('')
       :'<div class="rank-empty">请先录入商品</div>';
 
-    Dashboard._rtab = (tab, btn, cont) => {
-      cont.querySelectorAll('.rank-tab').forEach(b=>b.classList.remove('active')); btn.classList.add('active');
-      cont.querySelector('#rp-sold').style.display=tab==='sold'?'':'none';
-      cont.querySelector('#rp-unit').style.display=tab==='unit'?'':'none';
-    };
+    Dashboard._rtab = (tab, btn) => {
+      const cont = btn.closest('.page-view');
+      cont.querySelectorAll('.rank-tab').forEach(b => b.classList.remove('active');
+      btn.classList.add('active');
+      const soldEl = cont.querySelector('#rp-sold');
+      const unitEl = cont.querySelector('#rp-unit');
+      if(soldEl) soldEl.style.display = (tab === 'sold' ? '' : 'none');
+      if(unitEl) unitEl.style.display = (tab === 'unit' ? '' : 'none');
   }
 
   function _card(item, i, val, max, valLabel, subLabel) {
@@ -1219,10 +1222,15 @@ function switchTab(btn, viewId) {
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
 
+  if  (btn && btn.classList) { 
+    btn.classList.add('active');
+  }
+    
   // 隐藏所有
   document.querySelectorAll('.page-view').forEach(v => v.classList.remove('visible'));
   var calView = document.getElementById('view-calendar');
   calView.style.display = 'none';
+
 
   if (viewId === 'calendar') {
     calView.style.display = '';
@@ -1384,8 +1392,8 @@ function openSheet(day, key, data, isToday, isFuture, isPast, hasSales) {
       '<div class="mc"><div class="mc-lbl">毛利率</div><div class="mc-val '+(gm&&gm>=50?'g':'o')+'">'+( gm ? gm+'%' : '—' )+'</div></div>';
     if (isToday) {
       btnRow.innerHTML =
-        '<button class="btn-sh btn-primary" onclick="closeSheet();switchTab(document.querySelector(\'[data-view=cashier]\'),\'cashier\')"><span>🛒</span> 开始收银</button>'+
-        '<button class="btn-sh btn-stock"   onclick="closeSheet();switchTab(document.querySelector(\'[data-view=restock]\'),\'restock\')"><span>📦</span> 进货</button>';
+        '<button class="btn-sh btn-primary" onclick="closeSheet();switchTab(null,\'cashier\')"><span>🛒</span> 开始收银</button>'+
+        '<button class="btn-sh btn-stock"   onclick="closeSheet();switchTab(null,\'restock\')"><span>📦</span> 进货</button>';
     } else {
       btnRow.innerHTML = '';
     }
