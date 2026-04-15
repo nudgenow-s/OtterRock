@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <link rel="manifest" href="manifest.json">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <title>水獭掌柜</title>
+    <script src="config.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root { --primary-pink: #ff85a2; --bg: #fff9fa; }
+        body { font-family: 'PingFang SC', sans-serif; background: var(--bg); display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
+        .container { width: 310px; background: white; border-radius: 35px; padding: 30px; box-shadow: 0 15px 40px rgba(255,133,162,0.1); text-align: center; position: relative; }
+        .logo { font-size: 70px; margin-bottom: 20px; }
+        h2 { color: var(--primary-pink); font-size: 20px; margin: 0 0 15px; }
+        input { width: 100%; border: none; background: #fef0f3; padding: 18px; border-radius: 20px; font-size: 20px; text-align: center; box-sizing: border-box; outline: none; color: var(--primary-pink); letter-spacing: 3px; font-weight: bold; }
+        .btn-go { width: 100%; background: var(--primary-pink); color: white; border: none; padding: 18px; border-radius: 50px; font-size: 16px; cursor: pointer; font-weight: bold; margin-top: 25px; box-shadow: 0 6px #ffdae3; }
+        
+        /* 恢复备份区域样式 */
+        .recovery-link { margin-top: 25px; font-size: 13px; color: #bbb; cursor: pointer; text-decoration: underline; transition: color 0.3s; }
+        .recovery-link:hover { color: var(--primary-pink); }
+        
+        #guide-box { display: none; }
+        .instruction { text-align: left; background: #fff9fa; padding: 20px; border-radius: 20px; margin: 20px 0; font-size: 13px; color: #777; line-height: 1.8; }
+        .highlight { color: var(--primary-pink); font-weight: bold; }
+        .lang-toggle { position: absolute; top: 15px; right: 20px; font-size: 12px; color: var(--primary-pink); font-weight: bold; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="lang-toggle" onclick="toggleLang()" id="lang-btn">EN</div>
+
+    <div id="auth-ui">
+        <div class="logo">🦦</div>
+        <h2 id="t-auth-title">激活您的能量站</h2>
+        <input type="text" id="activation-code" placeholder="ENTER CODE">
+        <button class="btn-go" onclick="handleVerify()" id="t-auth-btn">立即验证</button>
+        
+        <div class="recovery-link" onclick="document.getElementById('restore-file').click()" id="t-recover">
+            通过备份文件复原数据
+        </div>
+        <input type="file" id="restore-file" accept=".json" onchange="importStellarockData(event)" style="display:none;">
+    </div>
+
+    <div id="guide-box">
+        <div class="logo">📱</div>
+        <h2 id="t-guide-title">使用说明</h2>
+        <div class="instruction" id="t-instruction">
+            1️⃣ 点击浏览器底部的 <span class="highlight">分享按钮</span> (方块箭头)<br>
+            2️⃣ 向上滑动找到 <span class="highlight">“添加到主屏幕”</span><br>
+            3️⃣ 点击右上角 <span class="highlight">“添加”</span><br><br>
+            完成后从桌面图标进入。
+        </div>
+        <button class="btn-go" onclick="enterApp()" id="t-guide-btn">进入系统</button>
+    </div>
+</div>
+
+<script>
+
+    if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js')
+            .then(reg => console.log('门禁管家已就位', reg.scope))
+            .catch(err => console.log('管家罢工了', err));
+    });
+}
+
+    const PRIVATE_SALT = "INTJ_ARCHITECT_2026_PRO";
+
+    let currentLang = localStorage.getItem('lang') || 'zh';
+
+    const translations = {
+        'zh': {
+            'btn': 'EN',
+            'authTitle': '激活您的能量站',
+            'authBtn': '立即验证',
+            'recover': '通过备份文件复原数据',
+            'guideTitle': '使用说明',
+            'guideBtn': '进入系统',
+            'instruction': '为了获得 <span class="highlight">APP</span> 体验：<br><br>1️⃣ 点击浏览器底部的 <span class="highlight">分享按钮</span><br>2️⃣ 向上滑动找到 <span class="highlight">“添加到主屏幕”</span><br>3️⃣ 点击右上角 <span class="highlight">“添加”</span><br><br>完成后从桌面图标进入。',
+            'error': '激活码错误🦦',
+            'importSuccess': '✅ 资产还原成功，欢迎回来！',
+            'importError': '❌ 无效的备份文件。'
+        },
+        'en': {
+            'btn': '中文',
+            'authTitle': 'Activate Station',
+            'authBtn': 'Verify Now',
+            'recover': 'Restore from Backup File',
+            'guideTitle': 'Instructions',
+            'guideBtn': 'Enter System',
+            'instruction': 'To <span class="highlight">App Experience</span>:<br><br>1️⃣ Click the <span class="highlight">Share Icon</span><br>2️⃣ Tap <span class="highlight">"Add to Home Screen"</span><br>3️⃣ Tap <span class="highlight">"Add"</span> on the top right.<br><br>Then open from home screen.',
+            'error': 'Invalid Code. 🦦',
+            'importSuccess': '✅ Assets Restored! Welcome back.',
+            'importError': '❌ Invalid Backup File.'
+        }
+    };
+    
+    
+    function updateUI() {
+        const t = translations[currentLang];
+        document.getElementById('lang-btn').innerText = t.btn;
+        document.getElementById('t-auth-title').innerText = t.authTitle;
+        document.getElementById('t-auth-btn').innerText = t.authBtn;
+        document.getElementById('t-recover').innerText = t.recover;
+        document.getElementById('t-guide-title').innerText = t.guideTitle;
+        document.getElementById('t-guide-btn').innerText = t.guideBtn;
+        document.getElementById('t-instruction').innerHTML = t.instruction;
+    }
+
+    function toggleLang() {
+        currentLang = currentLang === 'zh' ? 'en' : 'zh';
+        localStorage.setItem('lang', currentLang);
+        updateUI();
+    }
+
+    function generateDeviceFingerprint() {
+        const info = [
+            navigator.userAgent,
+            screen.width + "x" + screen.height,
+            navigator.language
+        ].join('|');
+        let hash = 0;
+        for (let i = 0; i < info.length; i++) {
+            hash = ((hash << 5) - hash) + info.charCodeAt(i);
+            hash |= 0;
+        }
+        return Math.abs(hash).toString(36).toUpperCase();
+    }
+
+    async function validateLicense(code) {
+        if (!code || code.length !== 20) return false;
+        const prefix = code.substring(0,12).toUpperCase();
+        const suffix = code.substring(12).toLowerCase();
+        const msgUint8 = new TextEncoder().encode(prefix + PRIVATE_SALT);
+        const hashBuffer = await crypto.subtle.digest('SHA-256',msgUint8);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        const expectedSuffix = hashArray.map(b => b.toString(16).padStart(2,'0')).join('').substring(0,8);
+
+        return suffix === expectedSuffix;
+    }
+    
+    async function handleVerify() {
+        const input = document.getElementById('activation-code');
+        const btn = document.getElementById('t-auth-btn');
+        if (btn.disabled) return;
+        
+        const code = input.value.trim().toUpperCase();
+        const isValid = await validateLicense(code);
+      
+        if (isValid) {
+            try {
+                btn.disabled = true;
+                const deviceID = generateDeviceFingerprint();
+                const WORKER_URL = 'https://stellarock-auth.jingyi950917.workers.dev';
+                const response = await fetch(WORKER_URL,{
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ code,deviceID })
+                });
+                const result = await response.json();
+                if (response.ok && result.status === 'success') {
+            localStorage.setItem('isActivated', 'true');
+            localStorage.setItem('license_key', code);
+            localStorage.setItem('bound_device_id',generateDeviceFingerprint());
+            
+            showGuide();
+        } else {
+            alert(translations[currentLang].error);
+                    btn.disabled = false;
+        }
+            } catch (err) {
+                alert(currentLang === 'zh' ? "请检查网络连接" : "Network required.");
+                btn.disabled = false;
+            }
+        } else {
+            alert(translations[currentLang].error);
+           
+        }
+    }
+
+    // --- 数据资产还原核心引擎 ---
+    function importStellarockData(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const data = JSON.parse(e.target.result);
+                // 验证是否为有效的 Stellarock 备份（必须包含激活标记或历史数据）
+                if (data.isActivated === 'true' || data.revenue_history) {
+                    localStorage.clear();
+                    for (let key in data) {
+                        localStorage.setItem(key, data[key]);
+                    }
+                    // 强制确保激活状态
+                    localStorage.setItem('isActivated', 'true');
+                    alert(translations[currentLang].importSuccess);
+                    enterApp(); // 直接进入，无需看引导
+                } else {
+                    throw new Error();
+                }
+            } catch (err) {
+                alert(translations[currentLang].importError);
+            }
+        };
+        reader.readAsText(file);
+    }
+
+    function showGuide() {
+        document.getElementById('auth-ui').style.display = 'none';
+        document.getElementById('guide-box').style.display = 'block';
+    }
+
+    function enterApp() {
+        window.location.replace('index.html');
+    }
+
+    if (localStorage.getItem('isActivated') === 'true') {
+        // 如果已激活，直接进引导页（或直接进App，根据你的PM逻辑决定）
+        showGuide();
+    }
+    updateUI();
+</script>
+</body>
+</html>
