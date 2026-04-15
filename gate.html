@@ -9,22 +9,22 @@
     
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        :root { --primary-pink: #ff85a2; --bg: #fff9fa; }
-        body { font-family: 'PingFang SC', sans-serif; background: var(--bg); display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
-        .container { width: 310px; background: white; border-radius: 35px; padding: 30px; box-shadow: 0 15px 40px rgba(255,133,162,0.1); text-align: center; position: relative; }
+        :root { --primary-orange: #ff6b35; --bg: #c44d1a; }
+        body { font-family: 'PingFang SC', sans-serif; background: var(--primary-orange); display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
+        .container { width: 310px; background: #cc552a; border-radius: 35px; padding: 30px; box-shadow: 0 15px 40px rgba(127,53,26,0.1); text-align: center; position: relative; }
         .logo { font-size: 70px; margin-bottom: 20px; }
         h2 { color: var(--primary-pink); font-size: 20px; margin: 0 0 15px; }
-        input { width: 100%; border: none; background: #fef0f3; padding: 18px; border-radius: 20px; font-size: 20px; text-align: center; box-sizing: border-box; outline: none; color: var(--primary-pink); letter-spacing: 3px; font-weight: bold; }
-        .btn-go { width: 100%; background: var(--primary-pink); color: white; border: none; padding: 18px; border-radius: 50px; font-size: 16px; cursor: pointer; font-weight: bold; margin-top: 25px; box-shadow: 0 6px #ffdae3; }
+        input { width: 100%; border: none; background: #b24a25; padding: 18px; border-radius: 20px; font-size: 20px; text-align: center; box-sizing: border-box; outline: none; color: white; letter-spacing: 3px; font-weight: bold; }
+        .btn-go { width: 100%; background: var(--primary-orange); color: white; border: none; padding: 18px; border-radius: 50px; font-size: 16px; cursor: pointer; font-weight: bold; margin-top: 25px; box-shadow: 0 6px var(--bg); }
         
         /* 恢复备份区域样式 */
         .recovery-link { margin-top: 25px; font-size: 13px; color: #bbb; cursor: pointer; text-decoration: underline; transition: color 0.3s; }
-        .recovery-link:hover { color: var(--primary-pink); }
+        .recovery-link:hover { color: var(--primary-orange); }
         
         #guide-box { display: none; }
-        .instruction { text-align: left; background: #fff9fa; padding: 20px; border-radius: 20px; margin: 20px 0; font-size: 13px; color: #777; line-height: 1.8; }
-        .highlight { color: var(--primary-pink); font-weight: bold; }
-        .lang-toggle { position: absolute; top: 15px; right: 20px; font-size: 12px; color: var(--primary-pink); font-weight: bold; cursor: pointer; }
+        .instruction { text-align: left; background: #cc552a; padding: 20px; border-radius: 20px; margin: 20px 0; font-size: 13px; color: white; line-height: 1.8; }
+        .highlight { color: var(--primary-orange); font-weight: bold; }
+        .lang-toggle { position: absolute; top: 15px; right: 20px; font-size: 12px; color: var(--primary-orange); font-weight: bold; cursor: pointer; }
     </style>
 </head>
 <body>
