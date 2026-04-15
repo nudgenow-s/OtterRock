@@ -610,6 +610,16 @@ transition:transform .1s;
 <!-- ── Scripts ────────────────────────────────────────────────────── -->
 
 <script>
+
+  (function securityCheck() {
+    const isActivated = localStorage.getItem('isActivated');
+    if (isActivated !== 'true') {
+        // 如果没激活，强制重定向回大门，且不让用户通过“返回”跳过
+        window.location.replace('gate.html');
+    }
+})();
+
+    if (localStorage.getItem('hasSetup') !== 'true') window.location.href = 'index.html';
 // ══════════════════════════════════════════════════════════════════════════
 //  engine.js 内联
 // ══════════════════════════════════════════════════════════════════════════
@@ -1432,6 +1442,8 @@ document.querySelectorAll('.nav-btn').forEach(function(btn) {
   if (!view) return;
   btn.onclick = function() { switchTab(btn, view); };
 });
+
+
 </script>
 
 </body>
