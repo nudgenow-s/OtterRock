@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="manifest" href="manifest.json">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <title>獭掌柜</title>
+    <style>
+        :root { --primary-orange: #ff6b35; }
+        body { 
+            background: var(--orange); 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            height: 100vh; 
+            margin: 0; 
+            font-family: 'PingFang SC', sans-serif;
+        }
+        /* 一个简单的加载动画，保持视觉一致性 */
+        .loading-container { text-align: center; }
+        .otter-icon { font-size: 50px; animation: bounce 1s infinite; }
+        .loading-text { color: #845f38; font-size: 14px; margin-top: 10px; font-weight: bold; }
+        
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+    </style>
+</head>
+<body>
+
+<div class="loading-container">
+    <div class="otter-icon">🦦</div>
+    <div class="loading-text">正在同步水獭掌柜...</div>
+</div>
+
+<script>
+    // 路由守卫：检查是否激活
+(function securityCheck() {
+    const isActivated = localStorage.getItem('isActivated');
+    if (isActivated !== 'true') {
+        // 如果没激活，强制重定向回大门，且不让用户通过“返回”跳过
+        window.location.replace('gate.html');
+    }
+})();
+
+    /**
+     * 核心路由逻辑：
+     * 1. 检查 localStorage 是否有完成初始化设置的标记
+     * 2. 使用 window.location.replace 防止用户点击“返回”时陷入死循环
+     */
+    (function route() {
+        // 延迟 300ms 保证视觉上有个“启动”的感觉，也可以直接执行
+        setTimeout(() => {
+            const hasSetup = localStorage.getItem('hasSetup');
+
+            if (hasSetup === 'true') {
+                // 已完成设置，直接进入主操作页
+                window.location.replace('main.html');
+            } else {
+                // 新用户或清除了缓存，进入设置页
+                window.location.replace('gate.html');
+            }
+        }, 300);
+    })();
+</script>
+
+ 
+</body>
+</html>
