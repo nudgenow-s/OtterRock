@@ -5,6 +5,8 @@ const ASSETS = [
   './index.html',
   './main.html',
   './accounting.js',
+  './dashboard.js',
+  './engine.js',
   './manifest.json'
 
 ];
