@@ -154,7 +154,7 @@
             try {
                 btn.disabled = true;
                 const deviceID = generateDeviceFingerprint();
-                const WORKER_URL = 'https://stellarock-auth.jingyi950917.workers.dev';
+                const WORKER_URL = 'https://auth.nudgenow.xyz';
                 const response = await fetch(WORKER_URL,{
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
