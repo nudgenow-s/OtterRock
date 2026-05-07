@@ -3,7 +3,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no,viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <link rel="manifest" href="manifest.json">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>獭掌柜</title>
@@ -167,16 +167,15 @@ filter:drop-shadow(0 6px 10px rgba(255,107,53,.2)); pointer-events:none;
 .bottom-nav {
 position:fixed; bottom:0; left:50%; transform:translateX(-50%);
 width:100%; max-width:480px; background:#fff; border-top:2px solid var(--border);
-display:flex; z-index:200; padding-bottom:calc(env(safe-area-inset-bottom,0px)+8px);
-box-sizing:border-box;
-height:auto;
+display:flex; z-index:200; padding-bottom:env(safe-area-inset-bottom,6px);
+
 }
 .nav-btn {
 flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center;
-padding:12px 0px 4px; border:none; background:none; cursor:pointer; gap:2px;
+padding:9px 2px 7px; border:none; background:none; cursor:pointer; gap:3px;
 }
 .nav-ico   { font-size:20px; transition:transform .15s; }
-.nav-lbl   { font-size:10px; font-weight:800; color:#AAA;white-space:nowrap; }
+.nav-lbl   { font-size:9px; font-weight:800; color:#AAA; }
 .nav-btn.active .nav-lbl { color:var(--orange); }
 .nav-btn.active .nav-ico { transform:scale(1.18); }
 .nav-btn:active .nav-ico { transform:scale(.88); }
