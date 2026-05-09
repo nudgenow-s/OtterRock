@@ -10,33 +10,43 @@ const ASSETS = [
   './manifest.json'
 ];
 
-// 安装阶段：缓存所有资源，并立即激活不等待
+// 安装：缓存所有资源，并立即激活新版本（不等旧页面关闭）
 self.addEventListener('install', (e) => {
   e.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS))
+    caches.open(CACHE_NAME)
+      .then((cache) => cache.addAll(ASSETS))
+      .then(() => self.skipWaiting()) // 新SW立即接管
   );
-  self.skipWaiting(); // ✅ 新SW安装后立即接管，不等旧SW退出
 });
 
-// ✅ 激活阶段：清除旧版本缓存
+// 激活：清除所有旧版本缓存（localStorage不受影响）
 self.addEventListener('activate', (e) => {
   e.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(
-        keys
-          .filter((key) => key !== CACHE_NAME) // 不是当前版本的全部删掉
-          .map((key) => caches.delete(key))
-      )
-    )
+    caches.keys().then((keyList) => {
+      return Promise.all(
+        keyList.map((key) => {
+          if (key !== CACHE_NAME) {
+            return caches.delete(key); // 只删旧版缓存，不碰localStorage
+          }
+        })
+      );
+    }).then(() => self.clients.claim()) // 立即接管所有已打开的页面
   );
-  self.clients.claim(); // ✅ 立即控制所有已打开的页面
 });
 
-// 拦截请求：有缓存用缓存，没有就联网取
+// 网络优先：优先从服务器拉最新代码，离线时才用缓存兜底
 self.addEventListener('fetch', (e) => {
   e.respondWith(
-    caches.match(e.request).then((response) => {
-      return response || fetch(e.request);
-    })
+    fetch(e.request)
+      .then((networkResponse) => {
+        // 拿到新资源后，顺手更新缓存
+        const cloned = networkResponse.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(e.request, cloned));
+        return networkResponse;
+      })
+      .catch(() => {
+        // 无网络时，从缓存取
+        return caches.match(e.request);
+      })
   );
 });
