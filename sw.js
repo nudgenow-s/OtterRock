@@ -1,4 +1,4 @@
-const CACHE_NAME = 'otter-manager-v4';
+const CACHE_NAME = 'otter-manager-v4.1';
 const ASSETS = [
   './',
   './gate.html',
