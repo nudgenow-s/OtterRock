@@ -8,26 +8,24 @@
 const BARCODE_API = 'https://your-worker.your-subdomain.workers.dev';
 
 // ══════════════════════════════════════════════════════════════════════════
-//  扫码模块（单例，使用 ZXing 高识别率扫码库）
+//  扫码模块（单例，懒加载 QuaggaJS）
 // ══════════════════════════════════════════════════════════════════════════
 const BarcodeScanner = (function () {
-  let _reader    = null;   // ZXing BrowserMultiFormatReader 实例
-  let _scanning  = false;
-  let _onDetect  = null;
+  let _running   = false;
+  let _onDetect  = null;   // 回调：(barcodeString) => void
   let _overlayEl = null;
-  let _videoEl   = null;
-  let _stream    = null;
 
-  // 动态加载 ZXing（只加载一次）
-  function _loadZXing(cb) {
-    if (window.ZXing) { cb(); return; }
+  // 动态加载 QuaggaJS（只加载一次）
+  function _loadQuagga(cb) {
+    if (window.Quagga) { cb(); return; }
     const s = document.createElement('script');
-    s.src = 'https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js';
+    s.src = 'https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.8.4/dist/quagga.min.js';
     s.onload  = cb;
-    s.onerror = () => _setStatus('⚠️ 扫码库加载失败，请使用手动输入');
+    s.onerror = () => { alert('扫码库加载失败，请检查网络'); };
     document.head.appendChild(s);
   }
 
+  // 构建弹层 DOM（首次调用时插入）
   function _ensureOverlay() {
     if (_overlayEl) return;
     _overlayEl = document.createElement('div');
@@ -36,10 +34,10 @@ const BarcodeScanner = (function () {
       <div id="bco-inner">
         <div id="bco-header">
           <div id="bco-title">📷 扫描商品条形码</div>
-          <div id="bco-hint">将条形码对准中央扫描区，保持稳定</div>
+          <div id="bco-hint">将条形码对准中央扫描区</div>
         </div>
         <div id="bco-viewport">
-          <video id="bco-video" autoplay muted playsinline></video>
+          <div id="bco-quagga"></div>
           <div id="bco-frame">
             <span class="bco-corner tl"></span>
             <span class="bco-corner tr"></span>
@@ -60,7 +58,6 @@ const BarcodeScanner = (function () {
     document.body.appendChild(_overlayEl);
     _injectStyles();
 
-    _videoEl = _overlayEl.querySelector('#bco-video');
     _overlayEl.querySelector('#bco-close').onclick = close;
     _overlayEl.querySelector('#bco-manual-btn').onclick = () => {
       const v = _overlayEl.querySelector('#bco-manual-inp').value.trim();
@@ -96,13 +93,14 @@ const BarcodeScanner = (function () {
       #bco-hint   { color:rgba(255,255,255,.6); font-size:13px; margin-top:5px; }
 
       #bco-viewport {
-        position:relative; width:280px; height:200px;
+        position:relative; width:270px; height:270px;
         border-radius:16px; overflow:hidden; background:#000;
         flex-shrink:0;
       }
-      #bco-video {
-        width:100%; height:100%; object-fit:cover; display:block;
-      }
+      #bco-quagga { position:absolute; inset:0; }
+      #bco-quagga video  { width:100%!important; height:100%!important; object-fit:cover; }
+      #bco-quagga canvas { display:none; }
+
       #bco-frame {
         position:absolute; inset:0; pointer-events:none;
       }
@@ -134,7 +132,7 @@ const BarcodeScanner = (function () {
       }
 
       #bco-manual-row {
-        display:flex; gap:8px; margin-top:14px; width:280px;
+        display:flex; gap:8px; margin-top:14px; width:270px;
       }
       #bco-manual-inp {
         flex:1; background:rgba(255,255,255,.1);
@@ -148,6 +146,7 @@ const BarcodeScanner = (function () {
         padding:10px 16px; color:#fff; font-size:14px; font-weight:900;
         cursor:pointer; font-family:inherit;
       }
+
       #bco-close {
         margin-top:20px; background:rgba(255,255,255,.1);
         border:1.5px solid rgba(255,255,255,.2); color:#fff;
@@ -160,7 +159,9 @@ const BarcodeScanner = (function () {
       .f-name-wrap {
         position:relative; display:flex; align-items:center;
       }
-      .f-name-wrap .form-inp { padding-right:52px; }
+      .f-name-wrap .form-inp {
+        padding-right:52px;
+      }
       .scan-trigger-btn {
         position:absolute; right:6px;
         width:38px; height:38px;
@@ -170,9 +171,12 @@ const BarcodeScanner = (function () {
         transition:transform .12s, background .12s;
         box-shadow:0 3px 0 #C44D1A;
       }
-      .scan-trigger-btn:active { transform:translateY(2px); box-shadow:0 1px 0 #C44D1A; }
+      .scan-trigger-btn:active {
+        transform:translateY(2px); box-shadow:0 1px 0 #C44D1A;
+      }
       .scan-trigger-btn svg { width:19px; height:19px; }
 
+      /* 条码回显 */
       .f-barcode-tag {
         font-size:11px; font-weight:700; color:#999;
         margin-top:4px; display:none;
@@ -180,6 +184,7 @@ const BarcodeScanner = (function () {
       .f-barcode-tag.show { display:block; }
       .f-barcode-tag span { color:#FF6B35; }
 
+      /* 自动填充动画 */
       @keyframes autoFill {
         0%   { background:#FFF3EE; border-color:#FF6B35; }
         100% { background:#fff;    border-color:#EBEBEB; }
@@ -194,92 +199,76 @@ const BarcodeScanner = (function () {
   }
 
   function _fire(code) {
-    if (!code) return;
+    // 防抖：500ms 内同一码只触发一次
+    if (BarcodeScanner._lastCode === code &&
+        Date.now() - BarcodeScanner._lastTime < 500) return;
+    BarcodeScanner._lastCode = code;
+    BarcodeScanner._lastTime = Date.now();
+
     _setStatus('✅ 识别：' + code);
-    _stopScan();
+    _stopQuagga();
     if (_onDetect) _onDetect(code);
   }
 
-  function _stopScan() {
-    _scanning = false;
-    // 停止 ZXing
-    if (_reader) {
-      try { _reader.reset(); } catch(e) {}
+  function _stopQuagga() {
+    if (_running && window.Quagga) {
+      try { Quagga.stop(); } catch(e) {}
+      _running = false;
     }
-    // 释放摄像头
-    if (_stream) {
-      _stream.getTracks().forEach(t => t.stop());
-      _stream = null;
-    }
-    if (_videoEl) _videoEl.srcObject = null;
   }
 
   function open(onDetectCb) {
     _onDetect = onDetectCb;
     _ensureOverlay();
     _overlayEl.classList.add('open');
-    _setStatus('正在加载扫码库…');
+    _setStatus('正在启动摄像头…');
     _overlayEl.querySelector('#bco-manual-inp').value = '';
 
-    _loadZXing(() => {
-      if (_scanning) return;
-      _scanning = true;
-      _setStatus('正在启动摄像头…');
-
-      try {
-        _reader = new ZXing.BrowserMultiFormatReader();
-      } catch(e) {
-        _setStatus('⚠️ 初始化失败，请手动输入条形码');
-        return;
-      }
-
-      // 获取后置摄像头
-      ZXing.BrowserCodeReader.listVideoInputDevices().then(devices => {
-        // 优先选后置摄像头
-        const backCam = devices.find(d =>
-          /back|rear|environment/i.test(d.label)
-        ) || devices[devices.length - 1];
-
-        const deviceId = backCam ? backCam.deviceId : undefined;
-        const constraints = {
-          video: {
-            deviceId: deviceId ? { exact: deviceId } : undefined,
-            facingMode: deviceId ? undefined : { ideal: 'environment' },
-            width:  { ideal: 1280 },
-            height: { ideal: 720 },
-          }
-        };
-
-        // 先拿到 stream 绑定到 video，再让 ZXing 从 video 解码
-        navigator.mediaDevices.getUserMedia(constraints).then(stream => {
-          _stream = stream;
-          _videoEl.srcObject = stream;
-          _videoEl.play();
-          _setStatus('🔍 扫描中，请将条形码对准扫描框…');
-
-          // ZXing 持续从 video 解码
-          _reader.decodeFromVideoElement(_videoEl, (result, err) => {
-            if (!_scanning) return;
-            if (result) {
-              _fire(result.getText());
-            }
-            // err 在没扫到时会持续触发 NotFoundException，正常忽略
-          });
-
-        }).catch(err => {
-          _setStatus('⚠️ 摄像头权限被拒绝，请手动输入条形码');
+    _loadQuagga(() => {
+      if (_running) return;
+      Quagga.init({
+        inputStream: {
+          name: 'Live',
+          type: 'LiveStream',
+          target: document.getElementById('bco-quagga'),
+          constraints: { facingMode: 'environment', width: { min: 640 }, height: { min: 480 } },
+        },
+        locator:    { patchSize: 'medium', halfSample: true },
+        numOfWorkers: Math.min(navigator.hardwareConcurrency || 2, 4),
+        frequency:  10,
+        decoder: {
+          readers: [
+            'ean_reader','ean_8_reader',
+            'code_128_reader','code_39_reader',
+            'upc_reader','upc_e_reader',
+          ],
+        },
+        locate: true,
+      }, err => {
+        if (err) {
+          _setStatus('⚠️ 摄像头启动失败，请手动输入条形码');
           console.warn('[BarcodeScanner]', err);
-        });
+          return;
+        }
+        _running = true;
+        Quagga.start();
+        _setStatus('🔍 扫描中，请对准条形码…');
+      });
 
-      }).catch(err => {
-        _setStatus('⚠️ 无法获取摄像头列表，请手动输入');
-        console.warn('[BarcodeScanner]', err);
+      Quagga.onDetected(result => {
+        const code   = result.codeResult.code;
+        const errors = result.codeResult.decodedCodes
+          .filter(x => x.error !== undefined).map(x => x.error);
+        const avgErr = errors.length
+          ? errors.reduce((a, b) => a + b, 0) / errors.length : 0;
+        if (avgErr > 0.22) return;   // 置信度过低，忽略
+        _fire(code);
       });
     });
   }
 
   function close() {
-    _stopScan();
+    _stopQuagga();
     if (_overlayEl) _overlayEl.classList.remove('open');
   }
 
