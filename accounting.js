@@ -230,8 +230,13 @@ const BarcodeScanner = (function () {
     }
 
     const config = {
-      fps: 10,                               // 降低帧率，Safari PWA 更稳定
-      qrbox: { width: 200, height: 100 },
+      fps: 10,
+      // qrbox 改为函数，根据实际摄像头画面尺寸动态计算
+      // 宽度占画面 85%，高度占画面 35%，条形码不管远近都在框内
+      qrbox: (viewfinderWidth, viewfinderHeight) => ({
+        width:  Math.round(viewfinderWidth  * 0.85),
+        height: Math.round(viewfinderHeight * 0.35),
+      }),
       aspectRatio: 1.333,
       supportedScanTypes: [ Html5QrcodeScanType.SCAN_TYPE_CAMERA ],
       formatsToSupport: [
@@ -242,7 +247,6 @@ const BarcodeScanner = (function () {
         Html5QrcodeSupportedFormats.UPC_A,
         Html5QrcodeSupportedFormats.UPC_E,
       ],
-      // 去掉 experimentalFeatures，Safari PWA 下会导致只识别一次就停
     };
 
     scanner.start(
