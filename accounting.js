@@ -8,24 +8,49 @@
 const BARCODE_API = 'https://your-worker.your-subdomain.workers.dev';
 
 // ══════════════════════════════════════════════════════════════════════════
-//  扫码模块（单例，使用 html5-qrcode，移动端识别率最佳）
+//  扫码模块 — 优先用原生 BarcodeDetector（Safari/Chrome 系统级识别率）
+//             不支持时降级到 html5-qrcode
 // ══════════════════════════════════════════════════════════════════════════
 const BarcodeScanner = (function () {
-  let _scanner   = null;   // Html5Qrcode 实例
-  let _scanning  = false;
   let _onDetect  = null;
   let _overlayEl = null;
+  let _stream    = null;
+  let _videoEl   = null;
+  let _rafId     = null;       // requestAnimationFrame id
+  let _scanner   = null;       // html5-qrcode 降级实例
+  let _scanning  = false;
+  let _lastFired = '';
+  let _lastTime  = 0;
 
-  // 动态加载 html5-qrcode（只加载一次）
-  function _loadLib(cb) {
-    if (window.Html5Qrcode) { cb(); return; }
-    const s = document.createElement('script');
-    s.src = 'https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js';
-    s.onload  = cb;
-    s.onerror = () => _setStatus('⚠️ 扫码库加载失败，请使用手动输入');
-    document.head.appendChild(s);
+  // ── 防重复触发 ────────────────────────────────────────────────────
+  function _dedupe(code) {
+    const now = Date.now();
+    if (code === _lastFired && now - _lastTime < 1500) return;
+    _lastFired = code;
+    _lastTime  = now;
+    _beep();
+    _setStatus('✅ 识别：' + code);
+    _stop();
+    if (_onDetect) _onDetect(code);
   }
 
+  // ── 滴声 ──────────────────────────────────────────────────────────
+  function _beep() {
+    try {
+      const ctx  = new (window.AudioContext || window.webkitAudioContext)();
+      const osc  = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(1800, ctx.currentTime);
+      gain.gain.setValueAtTime(0.3, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.12);
+    } catch(e) {}
+  }
+
+  // ── DOM ───────────────────────────────────────────────────────────
   function _ensureOverlay() {
     if (_overlayEl) return;
     _overlayEl = document.createElement('div');
@@ -36,8 +61,18 @@ const BarcodeScanner = (function () {
           <div id="bco-title">📷 扫描商品条形码</div>
           <div id="bco-hint">手机离条形码 15-20cm，保持稳定</div>
         </div>
-        <!-- html5-qrcode 会在这个 div 里渲染摄像头画面 -->
-        <div id="bco-reader"></div>
+        <div id="bco-viewport">
+          <video id="bco-video" autoplay muted playsinline></video>
+          <div id="bco-frame">
+            <span class="bco-corner tl"></span>
+            <span class="bco-corner tr"></span>
+            <span class="bco-corner bl"></span>
+            <span class="bco-corner br"></span>
+            <div id="bco-scanline"></div>
+          </div>
+          <!-- 降级时 html5-qrcode 挂这里 -->
+          <div id="bco-reader" style="display:none;width:100%;height:100%;"></div>
+        </div>
         <div id="bco-status">正在启动摄像头…</div>
         <div id="bco-manual-row">
           <input id="bco-manual-inp" type="text" inputmode="numeric"
@@ -49,25 +84,25 @@ const BarcodeScanner = (function () {
     `;
     document.body.appendChild(_overlayEl);
     _injectStyles();
-
+    _videoEl = _overlayEl.querySelector('#bco-video');
     _overlayEl.querySelector('#bco-close').onclick = close;
     _overlayEl.querySelector('#bco-manual-btn').onclick = () => {
       const v = _overlayEl.querySelector('#bco-manual-inp').value.trim();
-      if (v) _fire(v);
+      if (v) _dedupe(v);
     };
     _overlayEl.querySelector('#bco-manual-inp').addEventListener('keydown', e => {
       if (e.key === 'Enter') {
         const v = _overlayEl.querySelector('#bco-manual-inp').value.trim();
-        if (v) _fire(v);
+        if (v) _dedupe(v);
       }
     });
   }
 
   function _injectStyles() {
     if (document.getElementById('bco-styles')) return;
-    const style = document.createElement('style');
-    style.id = 'bco-styles';
-    style.textContent = `
+    const s = document.createElement('style');
+    s.id = 'bco-styles';
+    s.textContent = `
       #barcode-overlay {
         display:none; position:fixed; inset:0;
         background:rgba(0,0,0,.92); z-index:9999;
@@ -78,31 +113,51 @@ const BarcodeScanner = (function () {
 
       #bco-inner {
         display:flex; flex-direction:column; align-items:center;
-        padding:20px 16px 28px; width:100%; max-width:360px;
+        padding:20px 16px 28px; width:100%; max-width:380px;
       }
-      #bco-header { text-align:center; margin-bottom:16px; }
+      #bco-header { text-align:center; margin-bottom:14px; }
       #bco-title  { color:#fff; font-size:19px; font-weight:900; }
       #bco-hint   { color:rgba(255,255,255,.6); font-size:12px; margin-top:5px; }
 
-      /* html5-qrcode 渲染容器 */
-      #bco-reader {
-        width:320px;
-        border-radius:16px;
-        overflow:hidden;
+      #bco-viewport {
+        position:relative;
+        width:100%; max-width:360px;
+        aspect-ratio:4/3;
+        border-radius:16px; overflow:hidden; background:#000;
       }
-      /* 覆盖 html5-qrcode 默认样式，让它更融入我们的设计 */
-      #bco-reader video       { border-radius:16px; }
-      #bco-reader img         { display:none !important; }
-      #bco-reader__scan_region { border-radius:16px; overflow:hidden; }
-      #bco-reader__dashboard  { display:none !important; }
+      #bco-video {
+        width:100%; height:100%; object-fit:cover; display:block;
+      }
+      #bco-frame {
+        position:absolute; inset:0; pointer-events:none;
+      }
+      .bco-corner {
+        position:absolute; width:28px; height:28px;
+        border-color:#FF6B35; border-style:solid;
+      }
+      .bco-corner.tl { top:16px;  left:16px;  border-width:3px 0 0 3px; border-radius:4px 0 0 0; }
+      .bco-corner.tr { top:16px;  right:16px; border-width:3px 3px 0 0; border-radius:0 4px 0 0; }
+      .bco-corner.bl { bottom:16px; left:16px;  border-width:0 0 3px 3px; border-radius:0 0 0 4px; }
+      .bco-corner.br { bottom:16px; right:16px; border-width:0 3px 3px 0; border-radius:0 0 4px 0; }
+
+      #bco-scanline {
+        position:absolute; left:16px; right:16px; height:2px;
+        background:linear-gradient(90deg,transparent,#FF6B35,transparent);
+        animation:bcoScan 2s ease-in-out infinite;
+      }
+      @keyframes bcoScan {
+        0%   { top:16px; opacity:0; }
+        10%  { opacity:1; }
+        90%  { opacity:1; }
+        100% { top:calc(100% - 18px); opacity:0; }
+      }
 
       #bco-status {
         color:rgba(255,255,255,.8); font-size:13px; font-weight:700;
         margin-top:14px; min-height:18px; text-align:center;
       }
-
       #bco-manual-row {
-        display:flex; gap:8px; margin-top:14px; width:320px;
+        display:flex; gap:8px; margin-top:14px; width:100%; max-width:360px;
       }
       #bco-manual-inp {
         flex:1; background:rgba(255,255,255,.1);
@@ -120,181 +175,149 @@ const BarcodeScanner = (function () {
         margin-top:18px; background:rgba(255,255,255,.1);
         border:1.5px solid rgba(255,255,255,.2); color:#fff;
         padding:11px 36px; border-radius:30px;
-        font-size:15px; font-weight:700; cursor:pointer;
-        font-family:inherit;
+        font-size:15px; font-weight:700; cursor:pointer; font-family:inherit;
       }
-
-      /* 商品名称输入框包裹层 */
-      .f-name-wrap {
-        position:relative; display:flex; align-items:center;
-      }
+      .f-name-wrap { position:relative; display:flex; align-items:center; }
       .f-name-wrap .form-inp { padding-right:52px; }
       .scan-trigger-btn {
-        position:absolute; right:6px;
-        width:38px; height:38px;
+        position:absolute; right:6px; width:38px; height:38px;
         background:#FF6B35; border:none; border-radius:10px;
         display:flex; align-items:center; justify-content:center;
         cursor:pointer; flex-shrink:0;
-        transition:transform .12s, background .12s;
-        box-shadow:0 3px 0 #C44D1A;
+        transition:transform .12s; box-shadow:0 3px 0 #C44D1A;
       }
       .scan-trigger-btn:active { transform:translateY(2px); box-shadow:0 1px 0 #C44D1A; }
       .scan-trigger-btn svg { width:19px; height:19px; }
-
-      .f-barcode-tag {
-        font-size:11px; font-weight:700; color:#999;
-        margin-top:4px; display:none;
-      }
+      .f-barcode-tag { font-size:11px; font-weight:700; color:#999; margin-top:4px; display:none; }
       .f-barcode-tag.show { display:block; }
       .f-barcode-tag span { color:#FF6B35; }
-
       @keyframes autoFill {
         0%   { background:#FFF3EE; border-color:#FF6B35; }
         100% { background:#fff;    border-color:#EBEBEB; }
       }
       .auto-filled { animation:autoFill 1.8s ease forwards; }
     `;
-    document.head.appendChild(style);
+    document.head.appendChild(s);
   }
 
   function _setStatus(msg) {
     if (_overlayEl) _overlayEl.querySelector('#bco-status').textContent = msg;
   }
 
-  function _beep() {
-    try {
-      const ctx = new (window.AudioContext || window.webkitAudioContext)();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.type = 'square';
-      osc.frequency.setValueAtTime(1800, ctx.currentTime);
-      gain.gain.setValueAtTime(0.3, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12);
-      osc.start(ctx.currentTime);
-      osc.stop(ctx.currentTime + 0.12);
-    } catch(e) {}
-  }
-
-  function _fire(code) {
-    if (!code) return;
-    _beep();
-    _setStatus('✅ 识别：' + code);
-    _stopScan();
-    if (_onDetect) _onDetect(code);
-  }
-
-  function _stopScan() {
+  // ── 停止所有扫描 ──────────────────────────────────────────────────
+  function _stop() {
     _scanning = false;
-    if (_scanner) {
-      // 先检查是否正在扫描再停止，避免报错
-      const s = _scanner;
-      _scanner = null;
-      s.stop().then(() => {
-        // 停止后清空 DOM，确保下次重建干净
-        const readerEl = document.getElementById('bco-reader');
-        if (readerEl) readerEl.innerHTML = '';
-      }).catch(() => {
-        const readerEl = document.getElementById('bco-reader');
-        if (readerEl) readerEl.innerHTML = '';
-      });
-    }
+    if (_rafId) { cancelAnimationFrame(_rafId); _rafId = null; }
+    if (_stream) { _stream.getTracks().forEach(t => t.stop()); _stream = null; }
+    if (_videoEl) _videoEl.srcObject = null;
+    if (_scanner) { _scanner.stop().catch(() => {}); _scanner = null; }
   }
 
-  function _startScanner() {
-    const readerEl = document.getElementById('bco-reader');
-    if (!readerEl) return;
-    readerEl.innerHTML = '';
+  // ── 方案A：原生 BarcodeDetector ──────────────────────────────────
+  function _startNative() {
+    const detector = new BarcodeDetector({
+      formats: ['ean_13','ean_8','code_128','code_39','upc_a','upc_e'],
+    });
 
-    // 防重复触发：同一个码 800ms 内只触发一次
-    let _lastFired = '';
-    let _lastFiredTime = 0;
-
-    function _dedupe(code) {
-      const now = Date.now();
-      if (code === _lastFired && now - _lastFiredTime < 800) return;
-      _lastFired = code;
-      _lastFiredTime = now;
-      _fire(code);
-    }
-
-    let scanner;
-    try {
-      scanner = new Html5Qrcode('bco-reader');
-      _scanner = scanner;
-    } catch(e) {
-      _setStatus('⚠️ 初始化失败，请手动输入');
-      _scanning = false;
-      return;
-    }
-
-    const config = {
-      fps: 10,
-      // qrbox 改为函数，根据实际摄像头画面尺寸动态计算
-      // 宽度占画面 85%，高度占画面 35%，条形码不管远近都在框内
-      qrbox: (viewfinderWidth, viewfinderHeight) => ({
-        width:  Math.round(viewfinderWidth  * 0.85),
-        height: Math.round(viewfinderHeight * 0.35),
-      }),
-      aspectRatio: 1.333,
-      supportedScanTypes: [ Html5QrcodeScanType.SCAN_TYPE_CAMERA ],
-      formatsToSupport: [
-        Html5QrcodeSupportedFormats.EAN_13,
-        Html5QrcodeSupportedFormats.EAN_8,
-        Html5QrcodeSupportedFormats.CODE_128,
-        Html5QrcodeSupportedFormats.CODE_39,
-        Html5QrcodeSupportedFormats.UPC_A,
-        Html5QrcodeSupportedFormats.UPC_E,
-      ],
-    };
-
-    scanner.start(
-      { facingMode: 'environment' },
-      config,
-      (decodedText) => {
-        if (_scanner === scanner) _dedupe(decodedText);
-      },
-      () => {}
-    ).then(() => {
+    navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+    }).then(stream => {
+      _stream = stream;
+      _videoEl.srcObject = stream;
+      _videoEl.style.display = 'block';
+      _overlayEl.querySelector('#bco-reader').style.display = 'none';
+      _videoEl.play();
       _setStatus('🔍 对准条形码，手机离远一点效果更好…');
+
+      function scan() {
+        if (!_scanning) return;
+        if (_videoEl.readyState === _videoEl.HAVE_ENOUGH_DATA) {
+          detector.detect(_videoEl).then(codes => {
+            if (codes.length > 0) _dedupe(codes[0].rawValue);
+          }).catch(() => {});
+        }
+        _rafId = requestAnimationFrame(scan);
+      }
+      _rafId = requestAnimationFrame(scan);
     }).catch(err => {
-      _setStatus('⚠️ 摄像头启动失败，请手动输入条形码');
-      _scanning = false;
-      console.warn('[BarcodeScanner]', err);
+      _setStatus('⚠️ 摄像头启动失败，请手动输入');
+      console.warn('[BarcodeScanner native]', err);
     });
   }
 
+  // ── 方案B：html5-qrcode 降级 ─────────────────────────────────────
+  function _startFallback() {
+    _videoEl.style.display = 'none';
+    const readerEl = _overlayEl.querySelector('#bco-reader');
+    readerEl.style.display = 'block';
+    readerEl.innerHTML = '';
+
+    function _loadLib(cb) {
+      if (window.Html5Qrcode) { cb(); return; }
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js';
+      s.onload = cb;
+      s.onerror = () => _setStatus('⚠️ 扫码库加载失败，请手动输入');
+      document.head.appendChild(s);
+    }
+
+    _loadLib(() => {
+      try { _scanner = new Html5Qrcode('bco-reader'); } catch(e) {
+        _setStatus('⚠️ 初始化失败，请手动输入'); return;
+      }
+      _scanner.start(
+        { facingMode: 'environment' },
+        {
+          fps: 10,
+          qrbox: (w, h) => ({ width: Math.round(w * 0.85), height: Math.round(h * 0.35) }),
+          aspectRatio: 1.333,
+          supportedScanTypes: [ Html5QrcodeScanType.SCAN_TYPE_CAMERA ],
+          formatsToSupport: [
+            Html5QrcodeSupportedFormats.EAN_13, Html5QrcodeSupportedFormats.EAN_8,
+            Html5QrcodeSupportedFormats.CODE_128, Html5QrcodeSupportedFormats.CODE_39,
+            Html5QrcodeSupportedFormats.UPC_A, Html5QrcodeSupportedFormats.UPC_E,
+          ],
+        },
+        (code) => { if (_scanner) _dedupe(code); },
+        () => {}
+      ).then(() => {
+        _setStatus('🔍 对准条形码，手机离远一点效果更好…');
+      }).catch(err => {
+        _setStatus('⚠️ 摄像头启动失败，请手动输入');
+        console.warn('[BarcodeScanner fallback]', err);
+      });
+    });
+  }
+
+  // ── open ──────────────────────────────────────────────────────────
   function open(onDetectCb) {
     _onDetect = onDetectCb;
     _ensureOverlay();
     _overlayEl.classList.add('open');
     _overlayEl.querySelector('#bco-manual-inp').value = '';
+    _lastFired = ''; _lastTime = 0;
 
-    if (_scanning) {
-      // 上次扫描未结束，先停再重启
-      _setStatus('正在重置摄像头…');
-      const old = _scanner;
-      _scanner = null;
-      _scanning = false;
-      const readerEl = document.getElementById('bco-reader');
-      if (readerEl) readerEl.innerHTML = '';
-      (old ? old.stop().catch(() => {}) : Promise.resolve()).then(() => {
-        _loadLib(() => { _scanning = true; _startScanner(); });
-      });
-      return;
+    if (_scanning) { _stop(); }
+    _scanning = true;
+    _setStatus('正在启动摄像头…');
+
+    // 优先用原生 BarcodeDetector（Safari 16.4+ / Chrome 83+）
+    if (window.BarcodeDetector) {
+      BarcodeDetector.getSupportedFormats().then(formats => {
+        if (formats.includes('ean_13') || formats.includes('code_128')) {
+          _setStatus('✨ 使用系统级扫码引擎…');
+          _startNative();
+        } else {
+          _startFallback();
+        }
+      }).catch(() => _startFallback());
+    } else {
+      _startFallback();
     }
-
-    _setStatus('正在加载扫码库…');
-    _loadLib(() => {
-      _scanning = true;
-      _setStatus('正在启动摄像头…');
-      _startScanner();
-    });
   }
 
   function close() {
-    _stopScan();
+    _stop();
     if (_overlayEl) _overlayEl.classList.remove('open');
   }
 
