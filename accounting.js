@@ -8,24 +8,24 @@
 const BARCODE_API = 'https://your-worker.your-subdomain.workers.dev';
 
 // ══════════════════════════════════════════════════════════════════════════
-//  扫码模块（单例，懒加载 QuaggaJS）
+//  扫码模块（单例，使用 html5-qrcode，移动端识别率最佳）
 // ══════════════════════════════════════════════════════════════════════════
 const BarcodeScanner = (function () {
-  let _running   = false;
-  let _onDetect  = null;   // 回调：(barcodeString) => void
+  let _scanner   = null;   // Html5Qrcode 实例
+  let _scanning  = false;
+  let _onDetect  = null;
   let _overlayEl = null;
 
-  // 动态加载 QuaggaJS（只加载一次）
-  function _loadQuagga(cb) {
-    if (window.Quagga) { cb(); return; }
+  // 动态加载 html5-qrcode（只加载一次）
+  function _loadLib(cb) {
+    if (window.Html5Qrcode) { cb(); return; }
     const s = document.createElement('script');
-    s.src = 'https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.8.4/dist/quagga.min.js';
+    s.src = 'https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js';
     s.onload  = cb;
-    s.onerror = () => { alert('扫码库加载失败，请检查网络'); };
+    s.onerror = () => _setStatus('⚠️ 扫码库加载失败，请使用手动输入');
     document.head.appendChild(s);
   }
 
-  // 构建弹层 DOM（首次调用时插入）
   function _ensureOverlay() {
     if (_overlayEl) return;
     _overlayEl = document.createElement('div');
@@ -34,18 +34,10 @@ const BarcodeScanner = (function () {
       <div id="bco-inner">
         <div id="bco-header">
           <div id="bco-title">📷 扫描商品条形码</div>
-          <div id="bco-hint">将条形码对准中央扫描区</div>
+          <div id="bco-hint">将条形码横向对准扫描框，保持稳定</div>
         </div>
-        <div id="bco-viewport">
-          <div id="bco-quagga"></div>
-          <div id="bco-frame">
-            <span class="bco-corner tl"></span>
-            <span class="bco-corner tr"></span>
-            <span class="bco-corner bl"></span>
-            <span class="bco-corner br"></span>
-            <div id="bco-scanline"></div>
-          </div>
-        </div>
+        <!-- html5-qrcode 会在这个 div 里渲染摄像头画面 -->
+        <div id="bco-reader"></div>
         <div id="bco-status">正在启动摄像头…</div>
         <div id="bco-manual-row">
           <input id="bco-manual-inp" type="text" inputmode="numeric"
@@ -78,7 +70,7 @@ const BarcodeScanner = (function () {
     style.textContent = `
       #barcode-overlay {
         display:none; position:fixed; inset:0;
-        background:rgba(0,0,0,.88); z-index:9999;
+        background:rgba(0,0,0,.92); z-index:9999;
         align-items:center; justify-content:center;
       }
       #barcode-overlay.open { display:flex; animation:bcoFadeIn .2s ease; }
@@ -86,53 +78,31 @@ const BarcodeScanner = (function () {
 
       #bco-inner {
         display:flex; flex-direction:column; align-items:center;
-        padding:24px 20px 32px; width:100%; max-width:360px;
+        padding:20px 16px 28px; width:100%; max-width:360px;
       }
-      #bco-header { text-align:center; margin-bottom:20px; }
+      #bco-header { text-align:center; margin-bottom:16px; }
       #bco-title  { color:#fff; font-size:19px; font-weight:900; }
-      #bco-hint   { color:rgba(255,255,255,.6); font-size:13px; margin-top:5px; }
+      #bco-hint   { color:rgba(255,255,255,.6); font-size:12px; margin-top:5px; }
 
-      #bco-viewport {
-        position:relative; width:270px; height:270px;
-        border-radius:16px; overflow:hidden; background:#000;
-        flex-shrink:0;
+      /* html5-qrcode 渲染容器 */
+      #bco-reader {
+        width:300px;
+        border-radius:16px;
+        overflow:hidden;
       }
-      #bco-quagga { position:absolute; inset:0; }
-      #bco-quagga video  { width:100%!important; height:100%!important; object-fit:cover; }
-      #bco-quagga canvas { display:none; }
-
-      #bco-frame {
-        position:absolute; inset:0; pointer-events:none;
-      }
-      .bco-corner {
-        position:absolute; width:26px; height:26px;
-        border-color:#FF6B35; border-style:solid; border-radius:3px;
-      }
-      .bco-corner.tl { top:12px;  left:12px;  border-width:3px 0 0 3px; }
-      .bco-corner.tr { top:12px;  right:12px; border-width:3px 3px 0 0; }
-      .bco-corner.bl { bottom:12px; left:12px;  border-width:0 0 3px 3px; }
-      .bco-corner.br { bottom:12px; right:12px; border-width:0 3px 3px 0; }
-
-      #bco-scanline {
-        position:absolute; left:12px; right:12px; height:2px;
-        background:linear-gradient(90deg,transparent,#FF6B35,transparent);
-        border-radius:2px;
-        animation:bcoScan 1.8s ease-in-out infinite;
-      }
-      @keyframes bcoScan {
-        0%   { top:12px;  opacity:0; }
-        10%  { opacity:1; }
-        90%  { opacity:1; }
-        100% { top:calc(100% - 14px); opacity:0; }
-      }
+      /* 覆盖 html5-qrcode 默认样式，让它更融入我们的设计 */
+      #bco-reader video       { border-radius:16px; }
+      #bco-reader img         { display:none !important; }
+      #bco-reader__scan_region { border-radius:16px; overflow:hidden; }
+      #bco-reader__dashboard  { display:none !important; }
 
       #bco-status {
-        color:rgba(255,255,255,.75); font-size:13px; font-weight:700;
+        color:rgba(255,255,255,.8); font-size:13px; font-weight:700;
         margin-top:14px; min-height:18px; text-align:center;
       }
 
       #bco-manual-row {
-        display:flex; gap:8px; margin-top:14px; width:270px;
+        display:flex; gap:8px; margin-top:14px; width:300px;
       }
       #bco-manual-inp {
         flex:1; background:rgba(255,255,255,.1);
@@ -146,9 +116,8 @@ const BarcodeScanner = (function () {
         padding:10px 16px; color:#fff; font-size:14px; font-weight:900;
         cursor:pointer; font-family:inherit;
       }
-
       #bco-close {
-        margin-top:20px; background:rgba(255,255,255,.1);
+        margin-top:18px; background:rgba(255,255,255,.1);
         border:1.5px solid rgba(255,255,255,.2); color:#fff;
         padding:11px 36px; border-radius:30px;
         font-size:15px; font-weight:700; cursor:pointer;
@@ -159,9 +128,7 @@ const BarcodeScanner = (function () {
       .f-name-wrap {
         position:relative; display:flex; align-items:center;
       }
-      .f-name-wrap .form-inp {
-        padding-right:52px;
-      }
+      .f-name-wrap .form-inp { padding-right:52px; }
       .scan-trigger-btn {
         position:absolute; right:6px;
         width:38px; height:38px;
@@ -171,12 +138,9 @@ const BarcodeScanner = (function () {
         transition:transform .12s, background .12s;
         box-shadow:0 3px 0 #C44D1A;
       }
-      .scan-trigger-btn:active {
-        transform:translateY(2px); box-shadow:0 1px 0 #C44D1A;
-      }
+      .scan-trigger-btn:active { transform:translateY(2px); box-shadow:0 1px 0 #C44D1A; }
       .scan-trigger-btn svg { width:19px; height:19px; }
 
-      /* 条码回显 */
       .f-barcode-tag {
         font-size:11px; font-weight:700; color:#999;
         margin-top:4px; display:none;
@@ -184,7 +148,6 @@ const BarcodeScanner = (function () {
       .f-barcode-tag.show { display:block; }
       .f-barcode-tag span { color:#FF6B35; }
 
-      /* 自动填充动画 */
       @keyframes autoFill {
         0%   { background:#FFF3EE; border-color:#FF6B35; }
         100% { background:#fff;    border-color:#EBEBEB; }
@@ -199,21 +162,17 @@ const BarcodeScanner = (function () {
   }
 
   function _fire(code) {
-    // 防抖：500ms 内同一码只触发一次
-    if (BarcodeScanner._lastCode === code &&
-        Date.now() - BarcodeScanner._lastTime < 500) return;
-    BarcodeScanner._lastCode = code;
-    BarcodeScanner._lastTime = Date.now();
-
+    if (!code) return;
     _setStatus('✅ 识别：' + code);
-    _stopQuagga();
+    _stopScan();
     if (_onDetect) _onDetect(code);
   }
 
-  function _stopQuagga() {
-    if (_running && window.Quagga) {
-      try { Quagga.stop(); } catch(e) {}
-      _running = false;
+  function _stopScan() {
+    _scanning = false;
+    if (_scanner) {
+      _scanner.stop().catch(() => {});
+      _scanner = null;
     }
   }
 
@@ -221,54 +180,62 @@ const BarcodeScanner = (function () {
     _onDetect = onDetectCb;
     _ensureOverlay();
     _overlayEl.classList.add('open');
-    _setStatus('正在启动摄像头…');
+    _setStatus('正在加载扫码库…');
     _overlayEl.querySelector('#bco-manual-inp').value = '';
 
-    _loadQuagga(() => {
-      if (_running) return;
-      Quagga.init({
-        inputStream: {
-          name: 'Live',
-          type: 'LiveStream',
-          target: document.getElementById('bco-quagga'),
-          constraints: { facingMode: 'environment', width: { min: 640 }, height: { min: 480 } },
-        },
-        locator:    { patchSize: 'medium', halfSample: true },
-        numOfWorkers: Math.min(navigator.hardwareConcurrency || 2, 4),
-        frequency:  10,
-        decoder: {
-          readers: [
-            'ean_reader','ean_8_reader',
-            'code_128_reader','code_39_reader',
-            'upc_reader','upc_e_reader',
-          ],
-        },
-        locate: true,
-      }, err => {
-        if (err) {
-          _setStatus('⚠️ 摄像头启动失败，请手动输入条形码');
-          console.warn('[BarcodeScanner]', err);
-          return;
-        }
-        _running = true;
-        Quagga.start();
-        _setStatus('🔍 扫描中，请对准条形码…');
-      });
+    _loadLib(() => {
+      if (_scanning) return;
+      _scanning = true;
+      _setStatus('正在启动摄像头…');
 
-      Quagga.onDetected(result => {
-        const code   = result.codeResult.code;
-        const errors = result.codeResult.decodedCodes
-          .filter(x => x.error !== undefined).map(x => x.error);
-        const avgErr = errors.length
-          ? errors.reduce((a, b) => a + b, 0) / errors.length : 0;
-        if (avgErr > 0.22) return;   // 置信度过低，忽略
-        _fire(code);
+      // 每次打开都重新创建实例（避免 DOM 状态残留）
+      const readerEl = _overlayEl.querySelector('#bco-reader');
+      readerEl.innerHTML = '';
+
+      try {
+        _scanner = new Html5Qrcode('bco-reader');
+      } catch(e) {
+        _setStatus('⚠️ 初始化失败，请手动输入');
+        _scanning = false;
+        return;
+      }
+
+      const config = {
+        fps: 15,                          // 每秒扫描帧数，15 对手机够用
+        qrbox: { width: 280, height: 100 }, // 扫描区域：宽扁形，适合条形码
+        aspectRatio: 1.7,                 // 摄像头画面宽高比
+        supportedScanTypes: [
+          Html5QrcodeScanType.SCAN_TYPE_CAMERA
+        ],
+        formatsToSupport: [               // 只识别条形码格式，跳过 QR 码加快速度
+          Html5QrcodeSupportedFormats.EAN_13,
+          Html5QrcodeSupportedFormats.EAN_8,
+          Html5QrcodeSupportedFormats.CODE_128,
+          Html5QrcodeSupportedFormats.CODE_39,
+          Html5QrcodeSupportedFormats.UPC_A,
+          Html5QrcodeSupportedFormats.UPC_E,
+        ],
+      };
+
+      _scanner.start(
+        { facingMode: 'environment' },   // 后置摄像头
+        config,
+        (decodedText) => {               // 成功回调
+          _fire(decodedText);
+        },
+        () => {}                         // 失败回调（每帧扫不到时触发，正常忽略）
+      ).then(() => {
+        _setStatus('🔍 扫描中，请将条形码横向对准扫描框…');
+      }).catch(err => {
+        _setStatus('⚠️ 摄像头启动失败，请手动输入条形码');
+        _scanning = false;
+        console.warn('[BarcodeScanner]', err);
       });
     });
   }
 
   function close() {
-    _stopQuagga();
+    _stopScan();
     if (_overlayEl) _overlayEl.classList.remove('open');
   }
 
