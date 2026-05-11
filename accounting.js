@@ -161,8 +161,25 @@ const BarcodeScanner = (function () {
     if (_overlayEl) _overlayEl.querySelector('#bco-status').textContent = msg;
   }
 
+  function _beep() {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(1800, ctx.currentTime);
+      gain.gain.setValueAtTime(0.3, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.12);
+    } catch(e) {}
+  }
+
   function _fire(code) {
     if (!code) return;
+    _beep();
     _setStatus('✅ 识别：' + code);
     _stopScan();
     if (_onDetect) _onDetect(code);
@@ -186,10 +203,26 @@ const BarcodeScanner = (function () {
   }
 
   function _startScanner() {
-    // 每次都重建 DOM 和实例
     const readerEl = document.getElementById('bco-reader');
     if (!readerEl) return;
     readerEl.innerHTML = '';
+
+    // 投票机制：同一个码连续出现 2 次才触发，避免误读
+    let _voteMap = {};
+    let _voteTimer = null;
+
+    function _vote(code) {
+      _voteMap[code] = (_voteMap[code] || 0) + 1;
+      if (_voteMap[code] >= 2) {
+        _voteMap = {};
+        clearTimeout(_voteTimer);
+        _fire(code);
+      } else {
+        // 1.5秒内没凑够票数就清空，防止上一个码的票污染下一个
+        clearTimeout(_voteTimer);
+        _voteTimer = setTimeout(() => { _voteMap = {}; }, 1500);
+      }
+    }
 
     let scanner;
     try {
@@ -202,9 +235,9 @@ const BarcodeScanner = (function () {
     }
 
     const config = {
-      fps: 20,
-      qrbox: { width: 280, height: 140 },
-      aspectRatio: 1.5,
+      fps: 25,                              // 高帧率提升识别概率
+      qrbox: { width: 300, height: 160 },   // 更高的框，EAN-13 条形码更容易填满
+      aspectRatio: 1.333,                   // 4:3，手机摄像头原生比例，画质最好
       supportedScanTypes: [ Html5QrcodeScanType.SCAN_TYPE_CAMERA ],
       formatsToSupport: [
         Html5QrcodeSupportedFormats.EAN_13,
@@ -214,18 +247,20 @@ const BarcodeScanner = (function () {
         Html5QrcodeSupportedFormats.UPC_A,
         Html5QrcodeSupportedFormats.UPC_E,
       ],
+      experimentalFeatures: {
+        useBarCodeDetectorIfSupported: true, // 优先用浏览器原生 BarcodeDetector API（Chrome/Safari 支持，速度更快）
+      },
     };
 
     scanner.start(
       { facingMode: 'environment' },
       config,
       (decodedText) => {
-        // 防止同一次扫描触发多次回调
-        if (_scanner === scanner) _fire(decodedText);
+        if (_scanner === scanner) _vote(decodedText);
       },
       () => {}
     ).then(() => {
-      _setStatus('🔍 扫描中，请将条形码横向对准扫描框…');
+      _setStatus('🔍 扫描中，让条形码填满扫描框…');
     }).catch(err => {
       _setStatus('⚠️ 摄像头启动失败，请手动输入条形码');
       _scanning = false;
@@ -335,9 +370,25 @@ function renderCashier(container) {
         <span class="page-title-text">开始收银</span>
       </div>
       <div class="search-wrap">
-        <div class="search-box">
+        <div class="search-box" style="position:relative;">
           <span class="search-ico">🔍</span>
-          <input id="cashier-search" class="search-inp" type="text" placeholder="搜索商品名称…" autocomplete="off">
+          <input id="cashier-search" class="search-inp" type="text"
+                 placeholder="搜索商品名称…" autocomplete="off"
+                 style="padding-right:52px;">
+          <!-- 扫码按钮 -->
+          <button class="scan-trigger-btn" style="position:absolute;right:6px;"
+                  title="扫描条形码" onclick="Accounting._cashierScan()">
+            <svg viewBox="0 0 24 24" fill="none"
+                 stroke="#fff" stroke-width="2.2"
+                 stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2"  y="4" width="2"  height="16" rx=".4"/>
+              <rect x="6"  y="4" width="1"  height="16" rx=".4"/>
+              <rect x="9"  y="4" width="2"  height="16" rx=".4"/>
+              <rect x="13" y="4" width="1"  height="16" rx=".4"/>
+              <rect x="16" y="4" width="2"  height="16" rx=".4"/>
+              <rect x="20" y="4" width="2"  height="16" rx=".4"/>
+            </svg>
+          </button>
         </div>
         <div id="cashier-dropdown" class="search-dropdown hidden"></div>
       </div>
@@ -361,6 +412,30 @@ function renderCashier(container) {
   const inp = container.querySelector('#cashier-search');
   const dd  = container.querySelector('#cashier-dropdown');
 
+  // ── 扫码加入购物车 ────────────────────────────────────────────────
+  Accounting._cashierScan = () => {
+    BarcodeScanner.open((code) => {
+      BarcodeScanner.close();
+
+      // 在本地库存里用条形码匹配（barcode 字段，录入时已保存）
+      const inv  = Engine.getInventory().filter(p => parseFloat(p.qty) > 0);
+      const prod = inv.find(p => p.barcode === code);
+
+      if (prod) {
+        // 找到了：填入搜索框名称 + 直接加入购物车
+        inp.value = prod.name;
+        addToCart(prod);
+        inp.value = '';
+        _showToast('✅ 已加入：' + prod.name);
+      } else {
+        // 没找到：把条形码填入搜索框，让用户看到提示
+        inp.value = '';
+        _showToast('⚠️ 库存中没有条码 ' + code + ' 的商品，请先录入');
+      }
+    });
+  };
+
+  // ── 文字搜索 ──────────────────────────────────────────────────────
   inp.addEventListener('input', () => {
     const q   = inp.value.trim().toLowerCase();
     const inv = Engine.getInventory().filter(p => parseFloat(p.qty) > 0);
@@ -413,7 +488,7 @@ function renderCashier(container) {
             <button class="ci-del" onclick="Accounting._cartDel(${i})">✕</button>
           </div>`)
         .join('')
-      : '<div class="cart-empty">点击搜索添加商品 🛍️</div>';
+      : '<div class="cart-empty">搜索或扫码添加商品 🛍️</div>';
     updateTotal();
   }
 
