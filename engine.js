@@ -237,5 +237,54 @@ const Engine = (function () {
   };
 })();
 
+// ══════════════════════════════════════════════════════════════════════════
+//  数据迁移机制
+//  在 engine.js 末尾、window.Engine = Engine; 之前插入此段代码
+//  每次数据结构有变化时，递增 CURRENT_VERSION，并在 _migrations 里加对应函数
+// ══════════════════════════════════════════════════════════════════════════
+
+const CURRENT_VERSION = 1;
+const VERSION_KEY = 'otter_db_version';
+
+const _migrations = {
+
+  // v0 → v1：给所有已有库存商品补上 barcode 字段
+  1: function() {
+    const inv = load(KEYS.inventory) || [];
+    let changed = false;
+    inv.forEach(p => {
+      if (!('barcode' in p)) {
+        p.barcode = null;
+        changed = true;
+      }
+    });
+    if (changed) save(KEYS.inventory, inv);
+    console.log('[Engine] Migration v1: barcode 字段补全完成');
+  },
+
+  // 以后新版本在这里继续加：
+  // 2: function() { ... },
+  // 3: function() { ... },
+};
+
+function runMigrations() {
+  const current = parseInt(localStorage.getItem(VERSION_KEY) || '0');
+  if (current >= CURRENT_VERSION) return;
+
+  for (let v = current + 1; v <= CURRENT_VERSION; v++) {
+    if (_migrations[v]) {
+      try {
+        _migrations[v]();
+      } catch(e) {
+        console.error('[Engine] Migration v' + v + ' 失败:', e);
+      }
+    }
+  }
+  localStorage.setItem(VERSION_KEY, String(CURRENT_VERSION));
+  console.log('[Engine] 数据已升级到 v' + CURRENT_VERSION);
+}
+
+// 启动时自动执行
+runMigrations();
 // 挂载到全局
 window.Engine = Engine;
