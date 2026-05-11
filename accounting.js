@@ -214,10 +214,15 @@ const BarcodeScanner = (function () {
   }
 
   // ── 方案A：原生 BarcodeDetector ──────────────────────────────────
-  function _startNative() {
-    const detector = new BarcodeDetector({
-      formats: ['ean_13','ean_8','code_128','code_39','upc_a','upc_e'],
-    });
+  function _startNative(supportedFormats) {
+    // 根据实际支持的格式构建列表，同时兼容 Safari（连字符）和 Chrome（下划线）
+    const wanted = ['ean_13','ean-13','ean_8','ean-8','code_128','code-128',
+                    'code_39','code-39','upc_a','upc-a','upc_e','upc-e'];
+    const formats = supportedFormats
+      ? wanted.filter(f => supportedFormats.includes(f))
+      : wanted;
+
+    const detector = new BarcodeDetector({ formats });
 
     navigator.mediaDevices.getUserMedia({
       video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
@@ -324,12 +329,21 @@ const BarcodeScanner = (function () {
     // 优先用原生 BarcodeDetector（Safari 16.4+ / Chrome 83+）
     if (window.BarcodeDetector) {
       BarcodeDetector.getSupportedFormats().then(formats => {
-        if (formats.includes('ean_13') || formats.includes('code_128')) {
-          _setStatus('✨ 使用系统级扫码引擎…');
-          _startNative();
-        } else {
-          _startFallback();
-        }
+        // 显示支持的格式，方便调试
+        _setStatus('检测格式：' + formats.join(',').substring(0, 40));
+        setTimeout(() => {
+          // Safari 用 'ean-13'（连字符），Chrome 用 'ean_13'（下划线），都要兼容
+          const hasBarcode = formats.some(f =>
+            ['ean_13','ean-13','ean_8','ean-8','code_128','code-128','upc_a','upc-a'].includes(f)
+          );
+          if (hasBarcode) {
+            _setStatus('✨ 使用系统级扫码引擎…');
+            _startNative(formats);
+          } else {
+            _setStatus('降级到 JS 引擎…');
+            _startFallback();
+          }
+        }, 1500);
       }).catch(() => _startFallback());
     } else {
       _startFallback();
