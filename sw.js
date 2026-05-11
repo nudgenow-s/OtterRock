@@ -3,7 +3,7 @@
 // ⚠️ 每次发布前把下面的日期改成当天，格式 otter-v年月日
 // 例：2026年5月10日发布 → 'otter-v20260510'
 
-const CACHE_NAME = 'otter-v20260514';
+const CACHE_NAME = 'otter-v20260515';
 
 const ASSETS = [
   './',
