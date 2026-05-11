@@ -1,4 +1,10 @@
-const CACHE_NAME = 'otter-manager-v4.2';
+// ── 獭掌柜 · Service Worker ──────────────────────────────────────────────
+// 策略：网络优先，离线兜底
+// ⚠️ 每次发布前把下面的日期改成当天，格式 otter-v年月日
+// 例：2026年5月10日发布 → 'otter-v20260510'
+
+const CACHE_NAME = 'otter-v20260510';
+
 const ASSETS = [
   './',
   './gate.html',
@@ -7,46 +13,55 @@ const ASSETS = [
   './accounting.js',
   './dashboard.js',
   './engine.js',
-  './manifest.json'
+  './manifest.json',
 ];
 
-// 安装：缓存所有资源，并立即激活新版本（不等旧页面关闭）
+// ── 安装：缓存所有资源，立即激活 ────────────────────────────────────────
 self.addEventListener('install', (e) => {
   e.waitUntil(
     caches.open(CACHE_NAME)
       .then((cache) => cache.addAll(ASSETS))
-      .then(() => self.skipWaiting()) // 新SW立即接管
+      .then(() => self.skipWaiting())
   );
 });
 
-// 激活：清除所有旧版本缓存（localStorage不受影响）
+// ── 激活：清除所有旧版本缓存 ─────────────────────────────────────────────
 self.addEventListener('activate', (e) => {
   e.waitUntil(
-    caches.keys().then((keyList) => {
-      return Promise.all(
-        keyList.map((key) => {
-          if (key !== CACHE_NAME) {
-            return caches.delete(key); // 只删旧版缓存，不碰localStorage
-          }
-        })
-      );
-    }).then(() => self.clients.claim()) // 立即接管所有已打开的页面
+    caches.keys().then((keys) =>
+      Promise.all(
+        keys
+          .filter((key) => key !== CACHE_NAME)
+          .map((key) => caches.delete(key))
+      )
+    ).then(() => self.clients.claim())
   );
 });
 
-// 网络优先：优先从服务器拉最新代码，离线时才用缓存兜底
+// ── Fetch：网络优先，失败走缓存 ──────────────────────────────────────────
 self.addEventListener('fetch', (e) => {
+  // 只处理 GET，跳过 POST/API 请求
+  if (e.request.method !== 'GET') return;
+
+  // 跳过跨域请求（CDN、API、ipapi 等），不缓存
+  const url = new URL(e.request.url);
+  if (url.origin !== location.origin) return;
+
   e.respondWith(
     fetch(e.request)
-      .then((networkResponse) => {
-        // 拿到新资源后，顺手更新缓存
-        const cloned = networkResponse.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(e.request, cloned));
-        return networkResponse;
+      .then((res) => {
+        // 只缓存正常响应
+        if (res && res.status === 200) {
+          const cloned = res.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(e.request, cloned));
+        }
+        return res;
       })
-      .catch(() => {
-        // 无网络时，从缓存取
-        return caches.match(e.request);
-      })
+      .catch(() => caches.match(e.request))
   );
+});
+
+// ── 收到主线程消息：强制跳过等待 ────────────────────────────────────────
+self.addEventListener('message', (e) => {
+  if (e.data === 'SKIP_WAITING') self.skipWaiting();
 });
