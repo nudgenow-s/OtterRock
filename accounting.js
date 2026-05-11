@@ -226,19 +226,39 @@ const BarcodeScanner = (function () {
       _videoEl.srcObject = stream;
       _videoEl.style.display = 'block';
       _overlayEl.querySelector('#bco-reader').style.display = 'none';
-      _videoEl.play();
-      _setStatus('🔍 对准条形码，手机离远一点效果更好…');
 
-      function scan() {
-        if (!_scanning) return;
-        if (_videoEl.readyState === _videoEl.HAVE_ENOUGH_DATA) {
-          detector.detect(_videoEl).then(codes => {
-            if (codes.length > 0) _dedupe(codes[0].rawValue);
-          }).catch(() => {});
-        }
-        _rafId = requestAnimationFrame(scan);
-      }
-      _rafId = requestAnimationFrame(scan);
+      _videoEl.onloadedmetadata = () => {
+        _videoEl.play().then(() => {
+          _setStatus('🔍 对准条形码，手机离远一点效果更好…');
+
+          // 用 canvas 逐帧截图再检测，比直接传 video 在 Safari PWA 更可靠
+          const canvas  = document.createElement('canvas');
+          const ctx2d   = canvas.getContext('2d');
+
+          function scan() {
+            if (!_scanning) return;
+            if (_videoEl.readyState < 2 || _videoEl.paused) {
+              _rafId = requestAnimationFrame(scan);
+              return;
+            }
+
+            canvas.width  = _videoEl.videoWidth;
+            canvas.height = _videoEl.videoHeight;
+            ctx2d.drawImage(_videoEl, 0, 0);
+
+            createImageBitmap(canvas).then(bitmap => {
+              return detector.detect(bitmap).then(codes => {
+                bitmap.close();
+                if (codes.length > 0) _dedupe(codes[0].rawValue);
+              });
+            }).catch(() => {}).finally(() => {
+              if (_scanning) _rafId = requestAnimationFrame(scan);
+            });
+          }
+
+          _rafId = requestAnimationFrame(scan);
+        });
+      };
     }).catch(err => {
       _setStatus('⚠️ 摄像头启动失败，请手动输入');
       console.warn('[BarcodeScanner native]', err);
