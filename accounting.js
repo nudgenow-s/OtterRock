@@ -86,7 +86,7 @@ const BarcodeScanner = (function () {
 
       /* html5-qrcode 渲染容器 */
       #bco-reader {
-        width:300px;
+        width:320px;
         border-radius:16px;
         overflow:hidden;
       }
@@ -102,7 +102,7 @@ const BarcodeScanner = (function () {
       }
 
       #bco-manual-row {
-        display:flex; gap:8px; margin-top:14px; width:300px;
+        display:flex; gap:8px; margin-top:14px; width:320px;
       }
       #bco-manual-inp {
         flex:1; background:rgba(255,255,255,.1);
@@ -171,66 +171,93 @@ const BarcodeScanner = (function () {
   function _stopScan() {
     _scanning = false;
     if (_scanner) {
-      _scanner.stop().catch(() => {});
+      // 先检查是否正在扫描再停止，避免报错
+      const s = _scanner;
       _scanner = null;
+      s.stop().then(() => {
+        // 停止后清空 DOM，确保下次重建干净
+        const readerEl = document.getElementById('bco-reader');
+        if (readerEl) readerEl.innerHTML = '';
+      }).catch(() => {
+        const readerEl = document.getElementById('bco-reader');
+        if (readerEl) readerEl.innerHTML = '';
+      });
     }
+  }
+
+  function _startScanner() {
+    // 每次都重建 DOM 和实例
+    const readerEl = document.getElementById('bco-reader');
+    if (!readerEl) return;
+    readerEl.innerHTML = '';
+
+    let scanner;
+    try {
+      scanner = new Html5Qrcode('bco-reader');
+      _scanner = scanner;
+    } catch(e) {
+      _setStatus('⚠️ 初始化失败，请手动输入');
+      _scanning = false;
+      return;
+    }
+
+    const config = {
+      fps: 20,
+      qrbox: { width: 280, height: 140 },
+      aspectRatio: 1.5,
+      supportedScanTypes: [ Html5QrcodeScanType.SCAN_TYPE_CAMERA ],
+      formatsToSupport: [
+        Html5QrcodeSupportedFormats.EAN_13,
+        Html5QrcodeSupportedFormats.EAN_8,
+        Html5QrcodeSupportedFormats.CODE_128,
+        Html5QrcodeSupportedFormats.CODE_39,
+        Html5QrcodeSupportedFormats.UPC_A,
+        Html5QrcodeSupportedFormats.UPC_E,
+      ],
+    };
+
+    scanner.start(
+      { facingMode: 'environment' },
+      config,
+      (decodedText) => {
+        // 防止同一次扫描触发多次回调
+        if (_scanner === scanner) _fire(decodedText);
+      },
+      () => {}
+    ).then(() => {
+      _setStatus('🔍 扫描中，请将条形码横向对准扫描框…');
+    }).catch(err => {
+      _setStatus('⚠️ 摄像头启动失败，请手动输入条形码');
+      _scanning = false;
+      console.warn('[BarcodeScanner]', err);
+    });
   }
 
   function open(onDetectCb) {
     _onDetect = onDetectCb;
     _ensureOverlay();
     _overlayEl.classList.add('open');
-    _setStatus('正在加载扫码库…');
     _overlayEl.querySelector('#bco-manual-inp').value = '';
 
+    if (_scanning) {
+      // 上次扫描未结束，先停再重启
+      _setStatus('正在重置摄像头…');
+      const old = _scanner;
+      _scanner = null;
+      _scanning = false;
+      const readerEl = document.getElementById('bco-reader');
+      if (readerEl) readerEl.innerHTML = '';
+      (old ? old.stop().catch(() => {}) : Promise.resolve()).then(() => {
+        _loadLib(() => { _scanning = true; _startScanner(); });
+      });
+      return;
+    }
+
+    _setStatus('正在加载扫码库…');
     _loadLib(() => {
-      if (_scanning) return;
       _scanning = true;
       _setStatus('正在启动摄像头…');
-
-      // 每次打开都重新创建实例（避免 DOM 状态残留）
-      const readerEl = _overlayEl.querySelector('#bco-reader');
-      readerEl.innerHTML = '';
-
-      try {
-        _scanner = new Html5Qrcode('bco-reader');
-      } catch(e) {
-        _setStatus('⚠️ 初始化失败，请手动输入');
-        _scanning = false;
-        return;
-      }
-
-      const config = {
-        fps: 15,                          // 每秒扫描帧数，15 对手机够用
-        qrbox: { width: 280, height: 100 }, // 扫描区域：宽扁形，适合条形码
-        aspectRatio: 1.7,                 // 摄像头画面宽高比
-        supportedScanTypes: [
-          Html5QrcodeScanType.SCAN_TYPE_CAMERA
-        ],
-        formatsToSupport: [               // 只识别条形码格式，跳过 QR 码加快速度
-          Html5QrcodeSupportedFormats.EAN_13,
-          Html5QrcodeSupportedFormats.EAN_8,
-          Html5QrcodeSupportedFormats.CODE_128,
-          Html5QrcodeSupportedFormats.CODE_39,
-          Html5QrcodeSupportedFormats.UPC_A,
-          Html5QrcodeSupportedFormats.UPC_E,
-        ],
-      };
-
-      _scanner.start(
-        { facingMode: 'environment' },   // 后置摄像头
-        config,
-        (decodedText) => {               // 成功回调
-          _fire(decodedText);
-        },
-        () => {}                         // 失败回调（每帧扫不到时触发，正常忽略）
-      ).then(() => {
-        _setStatus('🔍 扫描中，请将条形码横向对准扫描框…');
-      }).catch(err => {
-        _setStatus('⚠️ 摄像头启动失败，请手动输入条形码');
-        _scanning = false;
-        console.warn('[BarcodeScanner]', err);
-      });
+      _startScanner();
     });
   }
 
