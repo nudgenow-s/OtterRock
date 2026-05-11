@@ -215,7 +215,6 @@ const BarcodeScanner = (function () {
 
   // ── 方案A：原生 BarcodeDetector ──────────────────────────────────
   function _startNative(supportedFormats) {
-    // 根据实际支持的格式构建列表，同时兼容 Safari（连字符）和 Chrome（下划线）
     const wanted = ['ean_13','ean-13','ean_8','ean-8','code_128','code-128',
                     'code_39','code-39','upc_a','upc-a','upc_e','upc-e'];
     const formats = supportedFormats
@@ -232,38 +231,46 @@ const BarcodeScanner = (function () {
       _videoEl.style.display = 'block';
       _overlayEl.querySelector('#bco-reader').style.display = 'none';
 
-      _videoEl.onloadedmetadata = () => {
-        _videoEl.play().then(() => {
-          _setStatus('🔍 对准条形码，手机离远一点效果更好…');
+      // 同时监听多个事件，哪个先触发用哪个，解决 PWA 模式 onloadedmetadata 不触发的问题
+      let _started = false;
+      function _startScanLoop() {
+        if (_started) return;
+        _started = true;
+        _setStatus('🔍 对准条形码，手机离远一点效果更好…');
 
-          // 用 canvas 逐帧截图再检测，比直接传 video 在 Safari PWA 更可靠
-          const canvas  = document.createElement('canvas');
-          const ctx2d   = canvas.getContext('2d');
+        const canvas = document.createElement('canvas');
+        const ctx2d  = canvas.getContext('2d');
 
-          function scan() {
-            if (!_scanning) return;
-            if (_videoEl.readyState < 2 || _videoEl.paused) {
-              _rafId = requestAnimationFrame(scan);
-              return;
-            }
-
-            canvas.width  = _videoEl.videoWidth;
-            canvas.height = _videoEl.videoHeight;
-            ctx2d.drawImage(_videoEl, 0, 0);
-
-            createImageBitmap(canvas).then(bitmap => {
-              return detector.detect(bitmap).then(codes => {
-                bitmap.close();
-                if (codes.length > 0) _dedupe(codes[0].rawValue);
-              });
-            }).catch(() => {}).finally(() => {
-              if (_scanning) _rafId = requestAnimationFrame(scan);
-            });
+        function scan() {
+          if (!_scanning) return;
+          if (_videoEl.videoWidth === 0 || _videoEl.videoHeight === 0) {
+            _rafId = requestAnimationFrame(scan);
+            return;
           }
+          canvas.width  = _videoEl.videoWidth;
+          canvas.height = _videoEl.videoHeight;
+          ctx2d.drawImage(_videoEl, 0, 0);
+          createImageBitmap(canvas).then(bitmap => {
+            return detector.detect(bitmap).then(codes => {
+              bitmap.close();
+              if (codes.length > 0) _dedupe(codes[0].rawValue);
+            });
+          }).catch(() => {}).finally(() => {
+            if (_scanning) _rafId = requestAnimationFrame(scan);
+          });
+        }
+        _rafId = requestAnimationFrame(scan);
+      }
 
-          _rafId = requestAnimationFrame(scan);
-        });
-      };
+      _videoEl.onloadedmetadata  = () => { _videoEl.play(); _startScanLoop(); };
+      _videoEl.onloadeddata      = () => { _videoEl.play(); _startScanLoop(); };
+      _videoEl.oncanplay         = () => { _videoEl.play(); _startScanLoop(); };
+
+      // 兜底：500ms 后如果还没启动，强制 play
+      setTimeout(() => {
+        _videoEl.play().then(_startScanLoop).catch(() => {});
+      }, 500);
+
     }).catch(err => {
       _setStatus('⚠️ 摄像头启动失败，请手动输入');
       console.warn('[BarcodeScanner native]', err);
