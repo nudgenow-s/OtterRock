@@ -207,21 +207,16 @@ const BarcodeScanner = (function () {
     if (!readerEl) return;
     readerEl.innerHTML = '';
 
-    // 投票机制：同一个码连续出现 2 次才触发，避免误读
-    let _voteMap = {};
-    let _voteTimer = null;
+    // 防重复触发：同一个码 800ms 内只触发一次
+    let _lastFired = '';
+    let _lastFiredTime = 0;
 
-    function _vote(code) {
-      _voteMap[code] = (_voteMap[code] || 0) + 1;
-      if (_voteMap[code] >= 2) {
-        _voteMap = {};
-        clearTimeout(_voteTimer);
-        _fire(code);
-      } else {
-        // 1.5秒内没凑够票数就清空，防止上一个码的票污染下一个
-        clearTimeout(_voteTimer);
-        _voteTimer = setTimeout(() => { _voteMap = {}; }, 1500);
-      }
+    function _dedupe(code) {
+      const now = Date.now();
+      if (code === _lastFired && now - _lastFiredTime < 800) return;
+      _lastFired = code;
+      _lastFiredTime = now;
+      _fire(code);
     }
 
     let scanner;
@@ -235,8 +230,8 @@ const BarcodeScanner = (function () {
     }
 
     const config = {
-      fps: 25,
-      qrbox: { width: 200, height: 100 },   // 缩小框，用户自然会把手机拿远，画面更清晰
+      fps: 10,                               // 降低帧率，Safari PWA 更稳定
+      qrbox: { width: 200, height: 100 },
       aspectRatio: 1.333,
       supportedScanTypes: [ Html5QrcodeScanType.SCAN_TYPE_CAMERA ],
       formatsToSupport: [
@@ -247,16 +242,14 @@ const BarcodeScanner = (function () {
         Html5QrcodeSupportedFormats.UPC_A,
         Html5QrcodeSupportedFormats.UPC_E,
       ],
-      experimentalFeatures: {
-        useBarCodeDetectorIfSupported: true,
-      },
+      // 去掉 experimentalFeatures，Safari PWA 下会导致只识别一次就停
     };
 
     scanner.start(
       { facingMode: 'environment' },
       config,
       (decodedText) => {
-        if (_scanner === scanner) _vote(decodedText);
+        if (_scanner === scanner) _dedupe(decodedText);
       },
       () => {}
     ).then(() => {
