@@ -623,6 +623,13 @@ transition:transform .1s;
     }
 })();
 </script>
+<script>
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    window.location.reload();
+  });
+}
+</script>
 <script src="engine.js"></script>
 <script src="accounting.js"></script>
 <script src="dashboard.js"></script>
