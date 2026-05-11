@@ -8,6 +8,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>獭掌柜</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('message', (e) => {
+    if (e.data === 'SW_UPDATED') window.location.reload();
+  });
+}
+</script>
 <style>
 /* ── RESET & BASE ── */
 * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
@@ -623,13 +630,7 @@ transition:transform .1s;
     }
 })();
 </script>
-<script>
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.addEventListener('controllerchange', () => {
-    window.location.reload();
-  });
-}
-</script>
+
 <script src="engine.js"></script>
 <script src="accounting.js"></script>
 <script src="dashboard.js"></script>
