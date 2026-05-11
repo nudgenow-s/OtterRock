@@ -34,7 +34,7 @@ const BarcodeScanner = (function () {
       <div id="bco-inner">
         <div id="bco-header">
           <div id="bco-title">📷 扫描商品条形码</div>
-          <div id="bco-hint">将条形码横向对准扫描框，保持稳定</div>
+          <div id="bco-hint">手机离条形码 15-20cm，保持稳定</div>
         </div>
         <!-- html5-qrcode 会在这个 div 里渲染摄像头画面 -->
         <div id="bco-reader"></div>
@@ -235,9 +235,9 @@ const BarcodeScanner = (function () {
     }
 
     const config = {
-      fps: 25,                              // 高帧率提升识别概率
-      qrbox: { width: 300, height: 160 },   // 更高的框，EAN-13 条形码更容易填满
-      aspectRatio: 1.333,                   // 4:3，手机摄像头原生比例，画质最好
+      fps: 25,
+      qrbox: { width: 200, height: 100 },   // 缩小框，用户自然会把手机拿远，画面更清晰
+      aspectRatio: 1.333,
       supportedScanTypes: [ Html5QrcodeScanType.SCAN_TYPE_CAMERA ],
       formatsToSupport: [
         Html5QrcodeSupportedFormats.EAN_13,
@@ -248,7 +248,7 @@ const BarcodeScanner = (function () {
         Html5QrcodeSupportedFormats.UPC_E,
       ],
       experimentalFeatures: {
-        useBarCodeDetectorIfSupported: true, // 优先用浏览器原生 BarcodeDetector API（Chrome/Safari 支持，速度更快）
+        useBarCodeDetectorIfSupported: true,
       },
     };
 
@@ -260,7 +260,7 @@ const BarcodeScanner = (function () {
       },
       () => {}
     ).then(() => {
-      _setStatus('🔍 扫描中，让条形码填满扫描框…');
+      _setStatus('🔍 对准条形码，手机离远一点效果更好…');
     }).catch(err => {
       _setStatus('⚠️ 摄像头启动失败，请手动输入条形码');
       _scanning = false;
