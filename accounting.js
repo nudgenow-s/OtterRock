@@ -460,7 +460,11 @@ function renderCashier(container) {
     const q   = inp.value.trim().toLowerCase();
     const inv = Engine.getInventory().filter(p => parseFloat(p.qty) > 0);
     if (!q) { dd.classList.add('hidden'); return; }
-    const results = inv.filter(p => p.name.toLowerCase().includes(q));
+    // 同时支持按商品名称和条形码搜索
+    const results = inv.filter(p =>
+      p.name.toLowerCase().includes(q) ||
+      (p.barcode && p.barcode.includes(q))
+    );
     dd.innerHTML = results.length
       ? results.map(p => `<div class="dd-item" data-id="${p.id}"><span class="dd-name">${p.name}</span><span class="dd-info">库存${p.qty}件 · ${Engine.fmtMoney(p.salePrice)}</span></div>`).join('')
       : '<div class="dd-empty">没有找到商品</div>';
@@ -723,8 +727,8 @@ function _renderForm(container, source, title, icon, subtitle) {
     if (isNaN(sale) || sale < 0) return _shake(container.querySelector('#f-sale'), '请填写有效售价');
     if (isNaN(qty)  || qty  < 1) return _shake(container.querySelector('#f-qty'),  '数量至少为1');
 
-    // 本地存储
-    Engine.addProduct({ name, category: cat, qty, costPrice: cost, salePrice: sale,
+    // 本地存储（含条形码字段）
+    Engine.addProduct({ barcode: _currentBarcode || null, name, category: cat, qty, costPrice: cost, salePrice: sale,
       expireDate: expDate, source: src, createdAt: new Date().toISOString() });
 
     // 上报到 Cloudflare（有条形码时才上报，静默）
