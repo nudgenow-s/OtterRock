@@ -3,7 +3,7 @@
 // ⚠️ 每次发布前把下面的日期改成当天，格式 otter-v年月日
 // 例：2026年5月10日发布 → 'otter-v20260510'
 
-const CACHE_NAME = 'otter-v20260515';
+const CACHE_NAME = 'otter-v20260516';
 
 const ASSETS = [
   './',
@@ -25,7 +25,7 @@ self.addEventListener('install', (e) => {
   );
 });
 
-// ── 激活：清除所有旧版本缓存 ─────────────────────────────────────────────
+// ── 激活：清除旧缓存，通知所有页面刷新 ───────────────────────────────────
 self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys().then((keys) =>
@@ -35,6 +35,8 @@ self.addEventListener('activate', (e) => {
           .map((key) => caches.delete(key))
       )
     ).then(() => self.clients.claim())
+     .then(() => self.clients.matchAll({ type: 'window' }))
+     .then((clients) => clients.forEach(c => c.postMessage('SW_UPDATED')))
   );
 });
 
