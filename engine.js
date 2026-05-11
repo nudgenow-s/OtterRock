@@ -50,6 +50,7 @@ const Engine = (function () {
       existing.qty = (parseFloat(existing.qty) || 0) + (parseFloat(product.qty) || 0);
       existing.salePrice  = product.salePrice  || existing.salePrice;
       existing.expireDate = product.expireDate || existing.expireDate;
+      existing.barcode = product.barcode || existing.barcode;
     } else {
       inv.push(Object.assign({ id: Date.now() + Math.random() }, product));
     }
