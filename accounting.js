@@ -5,7 +5,7 @@
 // ══════════════════════════════════════════════════════════════════════════
 //  ⚙️  配置区：部署后将此处替换为你的 Worker URL
 // ══════════════════════════════════════════════════════════════════════════
-const BARCODE_API = 'https://your-worker.your-subdomain.workers.dev';
+const BARCODE_API = ' https://tazhanggui-worker.jingyi950917.workers.dev';
 
 // ══════════════════════════════════════════════════════════════════════════
 //  扫码模块 — 优先用原生 BarcodeDetector（Safari/Chrome 系统级识别率）
